@@ -66,7 +66,6 @@ public-data:
     weather-warning:
       endpoint: ${KMA_WEATHER_WARNING_ENDPOINT:https://apis.data.go.kr/1360000/WthrWrnInfoService}
       service-key: ${KMA_WEATHER_WARNING_SERVICE_KEY:}
-    default-location:
-      # TODO: 지역별 격자좌표 매핑 엑셀 미확보 - 서울(종로구 부근) 기준 임시 기본값
-      nx: ${KMA_DEFAULT_NX:60}
-      ny: ${KMA_DEFAULT_NY:127}
+      # 위치의존 오퍼레이션의 지역 목록은 classpath:kma-facility-locations.csv (전국 교정기관 59개소,
+      # private-doc 24/25번 항목 참고) - FacilityLocationLoader가 읽어서 KmaLocationCollectorFactory가
+      # 오퍼레이션×지역 조합으로 컬렉터를 생성한다. 지역 추가/변경은 그 CSV만 고치면 됨.

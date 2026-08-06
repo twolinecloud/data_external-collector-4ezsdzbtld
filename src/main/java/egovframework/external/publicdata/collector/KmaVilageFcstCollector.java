@@ -1,8 +1,6 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -12,33 +10,26 @@ import java.util.Map;
 /**
  * 기상청 단기예보 조회서비스(VilageFcstInfoService_2.0) - getVilageFcst(단기예보조회, 최대 5일).
  * category: POP/PTY/PCP/REH/SNO/SKY/TMP/TMN/TMX/UUU/VVV/WAV/VEC/WSD 등 (카테고리별 분리는 정제 단계).
+ *
+ * <p>{@link Location} 하나당 인스턴스 하나, Spring Bean 아님 - {@link KmaLocationCollectorFactory} 참고.</p>
  */
-@Component
 public class KmaVilageFcstCollector implements PublicDataCollector {
 
     private final KmaApiClient apiClient;
     private final String endpoint;
     private final String serviceKey;
-    private final String nx;
-    private final String ny;
+    private final Location location;
 
-    public KmaVilageFcstCollector(
-        KmaApiClient apiClient,
-        @Value("${public-data.kma.village-forecast.endpoint}") String endpoint,
-        @Value("${public-data.kma.village-forecast.service-key:}") String serviceKey,
-        @Value("${public-data.kma.default-location.nx}") String nx,
-        @Value("${public-data.kma.default-location.ny}") String ny
-    ) {
+    public KmaVilageFcstCollector(KmaApiClient apiClient, String endpoint, String serviceKey, Location location) {
         this.apiClient = apiClient;
         this.endpoint = endpoint;
         this.serviceKey = serviceKey;
-        this.nx = nx;
-        this.ny = ny;
+        this.location = location;
     }
 
     @Override
     public String key() {
-        return "kma-village-forecast-vilage-fcst";
+        return "kma-village-forecast-vilage-fcst--" + location.facilityId();
     }
 
     @Override
@@ -48,7 +39,7 @@ public class KmaVilageFcstCollector implements PublicDataCollector {
 
     @Override
     public String apiName() {
-        return "단기예보조회";
+        return "단기예보조회 (" + location.facilityName() + ")";
     }
 
     @Override
@@ -61,8 +52,8 @@ public class KmaVilageFcstCollector implements PublicDataCollector {
         params.put("dataType", "JSON");
         params.put("base_date", baseTime.baseDate());
         params.put("base_time", baseTime.baseTime());
-        params.put("nx", nx);
-        params.put("ny", ny);
+        params.put("nx", location.nx());
+        params.put("ny", location.ny());
 
         return apiClient.call(sourceName(), apiName(), endpoint + "/getVilageFcst", serviceKey, params);
     }
