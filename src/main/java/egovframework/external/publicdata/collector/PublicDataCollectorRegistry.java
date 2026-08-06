@@ -1,5 +1,8 @@
 package egovframework.external.publicdata.collector;
 
+import egovframework.external.exception.NotFoundException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
@@ -16,6 +19,8 @@ import java.util.stream.Collectors;
 @Component
 public class PublicDataCollectorRegistry {
 
+    private static final Logger logger = LogManager.getLogger(PublicDataCollectorRegistry.class);
+
     private final Map<String, PublicDataCollector> collectorsByKey;
 
     public PublicDataCollectorRegistry(List<PublicDataCollector> collectors) {
@@ -23,10 +28,11 @@ public class PublicDataCollectorRegistry {
             .collect(Collectors.toUnmodifiableMap(PublicDataCollector::key, Function.identity()));
     }
 
+    /** @throws NotFoundException key에 해당하는 수집기가 없는 경우 (HTTP 404로 매핑됨) */
     public PublicDataCollector get(String key) {
         PublicDataCollector collector = collectorsByKey.get(key);
         if (collector == null) {
-            throw new IllegalArgumentException("Unknown collector key: " + key);
+            throw new NotFoundException(logger, "Unknown collector key: " + key);
         }
         return collector;
     }

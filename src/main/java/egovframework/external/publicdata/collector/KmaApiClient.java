@@ -45,8 +45,12 @@ public class KmaApiClient {
 
         try {
             return KmaResponseParser.extractItems(responseBody);
+        } catch (KmaApiException e) {
+            // JSON 구조는 정상이나 API가 업무적으로 실패를 반환한 경우(쿼터초과/인증만료 등) -
+            // "파싱 실패"와 구분해서 로그만 보고도 원인을 바로 알 수 있게 함
+            throw new CollectException(sourceName, apiName, "KMA API 오류 - " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new CollectException(sourceName, apiName, "응답 파싱 실패: " + e.getMessage(), e);
+            throw new CollectException(sourceName, apiName, "응답 파싱 실패(형식 오류): " + e.getMessage(), e);
         }
     }
 }

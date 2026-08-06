@@ -9,23 +9,31 @@ import egovframework.external.model.ExecutionType;
 import egovframework.external.staging.CollectionAttemptLogStore;
 import egovframework.external.staging.RawStagingStore;
 import egovframework.external.utility.PipelineLogUtils;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 하나의 {@link PublicDataCollector}를 실행하고 결과를 영속화하는 공통 로직.
  *
  * <p>{@code PublicDataCollectorScheduler}(자동 스케줄)와 {@code PublicDataCollectController}(수동 트리거)가
  * 이 서비스를 공유해서, 실행 경로가 스케줄이든 수동이든 완전히 동일한 처리(raw_staging 적재,
- * collection_attempt_log 기록)를 보장한다.</p>
+ * collection_attempt_log 기록, 메트릭 기록)를 보장한다.</p>
  *
  * <p>{@link RawStagingStore}/{@link CollectionAttemptLogStore}는 포트 인터페이스라 현재
  * 메모리 구현({@code InMemory*Store})에 의존하지만, 나중에 DB 어댑터로 교체해도 이 서비스는
  * 변경할 필요 없다 (private-doc 참고).</p>
+ *
+ * <p>관측성: {@code public_data_collect_attempts_total}(카운터, collectorKey/executionType/status
+ * 태그) / {@code public_data_collect_duration_seconds}(타이머, collectorKey 태그)를
+ * {@link MeterRegistry}에 기록 - {@code /actuator/prometheus}에서 확인 가능.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -36,23 +44,28 @@ public class PublicDataCollectionAttemptService {
 
     private final RawStagingStore rawStagingStore;
     private final CollectionAttemptLogStore collectionAttemptLogStore;
+    private final MeterRegistry meterRegistry;
 
     public void run(PublicDataCollector collector, ExecutionType executionType) {
         String sourceName = collector.sourceName();
         String apiName = collector.apiName();
+        String collectorKey = collector.key();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         List<String> rawPayloads;
         try {
             rawPayloads = collector.collect();
         } catch (CollectException e) {
-            PipelineLogUtils.warn(logger, STAGE, sourceName, apiName, e.getMessage());
-            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, e.getMessage());
+            long tookMs = stopTimer(sample, collectorKey);
+            PipelineLogUtils.warn(logger, STAGE, sourceName, apiName, e.getMessage() + " (" + tookMs + "ms)");
+            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, e.getMessage(), collectorKey);
             return;
         } catch (Exception e) {
             // 수집기 구현체가 CollectException으로 감싸지 않은 미처리 예외 - 그래도 배치를 죽이지 않고 이 소스만 실패 처리
+            long tookMs = stopTimer(sample, collectorKey);
             String message = "UNHANDLED EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage();
-            PipelineLogUtils.error(logger, STAGE, sourceName, apiName, message, e);
-            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, message);
+            PipelineLogUtils.error(logger, STAGE, sourceName, apiName, message + " (" + tookMs + "ms)", e);
+            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, message, collectorKey);
             return;
         }
 
@@ -65,12 +78,22 @@ public class PublicDataCollectionAttemptService {
             rawStagingStore.insert(dto);
         }
 
-        PipelineLogUtils.info(logger, STAGE, sourceName, apiName, "collected " + rawPayloads.size() + " record(s)");
-        logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null);
+        long tookMs = stopTimer(sample, collectorKey);
+        PipelineLogUtils.info(logger, STAGE, sourceName, apiName,
+            "collected " + rawPayloads.size() + " record(s) in " + tookMs + "ms");
+        logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null, collectorKey);
+    }
+
+    private long stopTimer(Timer.Sample sample, String collectorKey) {
+        long tookNanos = sample.stop(Timer.builder("public_data_collect_duration_seconds")
+            .description("공공데이터 수집(API 호출 ~ raw_staging 적재) 소요시간")
+            .tag("collectorKey", collectorKey)
+            .register(meterRegistry));
+        return TimeUnit.NANOSECONDS.toMillis(tookNanos);
     }
 
     private void logAttempt(String sourceName, String apiName, ExecutionType executionType,
-                             AttemptStatus status, int recordCount, String failureLog) {
+                             AttemptStatus status, int recordCount, String failureLog, String collectorKey) {
         CollectionAttemptLogDto log = CollectionAttemptLogDto.builder()
             .sourceName(sourceName)
             .apiName(apiName)
@@ -80,5 +103,13 @@ public class PublicDataCollectionAttemptService {
             .failureLog(failureLog)
             .build();
         collectionAttemptLogStore.insert(log);
+
+        Counter.builder("public_data_collect_attempts_total")
+            .description("공공데이터 수집 시도 건수")
+            .tag("collectorKey", collectorKey)
+            .tag("executionType", executionType.name())
+            .tag("status", status.name())
+            .register(meterRegistry)
+            .increment();
     }
 }

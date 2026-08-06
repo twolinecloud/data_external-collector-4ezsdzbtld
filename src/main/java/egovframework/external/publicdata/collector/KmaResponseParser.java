@@ -18,7 +18,7 @@ public final class KmaResponseParser {
 
     /**
      * @return item 배열 각각을 JSON 원문(String)으로 변환한 리스트. 결과 0건이면 빈 리스트.
-     * @throws IllegalStateException resultCode가 정상(00)이 아닌 경우
+     * @throws KmaApiException resultCode가 정상(00)이 아닌 경우 (JSON 구조 자체는 정상 - 업무적 실패)
      */
     public static List<String> extractItems(String responseBody) {
         JSONObject root = new JSONObject(responseBody);
@@ -28,7 +28,7 @@ public final class KmaResponseParser {
         String resultCode = header.optString("resultCode", "");
         if (!"00".equals(resultCode)) {
             String resultMsg = header.optString("resultMsg", "UNKNOWN");
-            throw new IllegalStateException("resultCode=" + resultCode + " resultMsg=" + resultMsg);
+            throw new KmaApiException(resultCode, resultMsg);
         }
 
         JSONObject body = response.optJSONObject("body");
