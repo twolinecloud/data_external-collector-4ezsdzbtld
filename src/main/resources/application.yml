@@ -45,3 +45,28 @@ management:
     web:
       exposure:
         include: '*'
+
+# 공공데이터 수집 파이프라인 (data-collector 저장소에서 이관됨, private-doc 19번 항목 참고)
+# 소스(오퍼레이션)별 스케줄은 개별 cron으로 관리 (기본값은 PublicDataCollectorScheduler 코드에도 있음, 여기서 오버라이드 가능)
+# 엔드포인트는 weather-api.docx / data.go.kr 공개 스펙 기준 실제 값. serviceKey는 .env로 로컬 주입
+public-data:
+  collector:
+    kma-village-forecast-ultra-srt-ncst:
+      cron: "0 12 * * * *"
+    kma-village-forecast-ultra-srt-fcst:
+      cron: "0 47 * * * *"
+    kma-village-forecast-vilage-fcst:
+      cron: "0 15 2,5,8,11,14,17,20,23 * * *"
+    kma-weather-warning-list:
+      cron: "0 */10 * * * *"
+  kma:
+    village-forecast:
+      endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}
+      service-key: ${KMA_VILLAGE_FORECAST_SERVICE_KEY:}
+    weather-warning:
+      endpoint: ${KMA_WEATHER_WARNING_ENDPOINT:https://apis.data.go.kr/1360000/WthrWrnInfoService}
+      service-key: ${KMA_WEATHER_WARNING_SERVICE_KEY:}
+    default-location:
+      # TODO: 지역별 격자좌표 매핑 엑셀 미확보 - 서울(종로구 부근) 기준 임시 기본값
+      nx: ${KMA_DEFAULT_NX:60}
+      ny: ${KMA_DEFAULT_NY:127}

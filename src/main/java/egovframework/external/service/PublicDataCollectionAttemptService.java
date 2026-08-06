@@ -1,0 +1,84 @@
+package egovframework.external.service;
+
+import egovframework.external.publicdata.collector.PublicDataCollector;
+import egovframework.external.dto.CollectionAttemptLogDto;
+import egovframework.external.dto.RawStagingDto;
+import egovframework.external.exception.CollectException;
+import egovframework.external.model.AttemptStatus;
+import egovframework.external.model.ExecutionType;
+import egovframework.external.staging.CollectionAttemptLogStore;
+import egovframework.external.staging.RawStagingStore;
+import egovframework.external.utility.PipelineLogUtils;
+import lombok.RequiredArgsConstructor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+/**
+ * 하나의 {@link PublicDataCollector}를 실행하고 결과를 영속화하는 공통 로직.
+ *
+ * <p>{@code PublicDataCollectorScheduler}(자동 스케줄)와 {@code PublicDataCollectController}(수동 트리거)가
+ * 이 서비스를 공유해서, 실행 경로가 스케줄이든 수동이든 완전히 동일한 처리(raw_staging 적재,
+ * collection_attempt_log 기록)를 보장한다.</p>
+ *
+ * <p>{@link RawStagingStore}/{@link CollectionAttemptLogStore}는 포트 인터페이스라 현재
+ * 메모리 구현({@code InMemory*Store})에 의존하지만, 나중에 DB 어댑터로 교체해도 이 서비스는
+ * 변경할 필요 없다 (private-doc 참고).</p>
+ */
+@Service
+@RequiredArgsConstructor
+public class PublicDataCollectionAttemptService {
+
+    private static final Logger logger = LogManager.getLogger(PublicDataCollectionAttemptService.class);
+    private static final String STAGE = "COLLECT";
+
+    private final RawStagingStore rawStagingStore;
+    private final CollectionAttemptLogStore collectionAttemptLogStore;
+
+    public void run(PublicDataCollector collector, ExecutionType executionType) {
+        String sourceName = collector.sourceName();
+        String apiName = collector.apiName();
+
+        List<String> rawPayloads;
+        try {
+            rawPayloads = collector.collect();
+        } catch (CollectException e) {
+            PipelineLogUtils.warn(logger, STAGE, sourceName, apiName, e.getMessage());
+            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, e.getMessage());
+            return;
+        } catch (Exception e) {
+            // 수집기 구현체가 CollectException으로 감싸지 않은 미처리 예외 - 그래도 배치를 죽이지 않고 이 소스만 실패 처리
+            String message = "UNHANDLED EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage();
+            PipelineLogUtils.error(logger, STAGE, sourceName, apiName, message, e);
+            logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, message);
+            return;
+        }
+
+        for (String rawPayload : rawPayloads) {
+            RawStagingDto dto = RawStagingDto.builder()
+                .sourceName(sourceName)
+                .apiName(apiName)
+                .rawPayload(rawPayload)
+                .build();
+            rawStagingStore.insert(dto);
+        }
+
+        PipelineLogUtils.info(logger, STAGE, sourceName, apiName, "collected " + rawPayloads.size() + " record(s)");
+        logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null);
+    }
+
+    private void logAttempt(String sourceName, String apiName, ExecutionType executionType,
+                             AttemptStatus status, int recordCount, String failureLog) {
+        CollectionAttemptLogDto log = CollectionAttemptLogDto.builder()
+            .sourceName(sourceName)
+            .apiName(apiName)
+            .executionType(executionType.name())
+            .status(status.name())
+            .recordCount(recordCount)
+            .failureLog(failureLog)
+            .build();
+        collectionAttemptLogStore.insert(log);
+    }
+}
