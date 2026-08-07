@@ -34,6 +34,18 @@ public class PublicDataCollectController {
     private final PublicDataCollectorRegistry collectorRegistry;
     private final PublicDataCollectionAttemptService collectionAttemptService;
 
+    /**
+     * {@code GET /public-data/collect} - 등록된 전체 컬렉터 목록 조회.
+     *
+     * <p>파라미터 없음. 위치독립 오퍼레이션(기상특보, 1개) + 위치의존 오퍼레이션 3종 ×
+     * 59개소(177개) = 총 178개 컬렉터가 반환된다. 각 항목의 {@code key}가 바로
+     * {@link #runManually(String)}에 넘길 값 - 아래에서 {@code key} 조회 후 그 값으로
+     * 수동 실행하는 흐름으로 쓰면 된다.</p>
+     *
+     * <p>응답 배열 원소: {@code key}(수동 실행용 식별자), {@code sourceName}(공공데이터 출처명),
+     * {@code apiName}(오퍼레이션명 - 위치의존이면 기관명이 괄호로 병기됨, 예:
+     * "단기예보조회 (서울지방교정청)").</p>
+     */
     @AdminCallable
     @GetMapping
     public Callable<Response<Object>> list() {
@@ -46,6 +58,24 @@ public class PublicDataCollectController {
             .toList());
     }
 
+    /**
+     * {@code POST /public-data/collect/{key}/run} - 컬렉터 1개를 즉시 수동 실행.
+     *
+     * <p>스케줄과 무관하게 지금 바로 실행하고 싶을 때 사용. <b>이 엔드포인트는 요청 1건당
+     * 컬렉터 1개(오퍼레이션 1개 × 기관 1곳)만 실행한다</b> - 위치의존 오퍼레이션의 59개소를
+     * 한꺼번에 도는 기능은 없으며, 그건 {@code PublicDataCollectorScheduler}의 자동 스케줄만
+     * 수행한다. 59개소 각각을 수동으로 돌리려면 이 API를 기관 수만큼 반복 호출해야 한다.</p>
+     *
+     * <p>실행 결과는 스케줄 실행과 동일한 {@link PublicDataCollectionAttemptService}를
+     * 공유하므로 raw_staging/collection_attempt_log/메트릭에 남는 기록도 동일 - 실행유형만
+     * {@code MANUAL}로 구분된다.</p>
+     *
+     * @param key {@code GET /public-data/collect}(위 {@link #list()})로 조회한 컬렉터 식별자.
+     *            위치독립 오퍼레이션은 {@code "kma-weather-warning-list"}처럼 오퍼레이션명 그대로,
+     *            위치의존 오퍼레이션은 {@code "{오퍼레이션}--{facilityId}"} 형태
+     *            (예: {@code "kma-village-forecast-vilage-fcst--f301"} = 단기예보조회, 대전지방교정청).
+     *            존재하지 않는 key면 {@code NotFoundException}(HTTP 404)
+     */
     @AdminCallable
     @PostMapping("/{key}/run")
     public Callable<Response<Object>> runManually(@PathVariable String key) {
