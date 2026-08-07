@@ -34,6 +34,8 @@ class PublicDataCollectionAttemptServiceTest {
     private static final String SOURCE_NAME = "공공데이터포털 (기상청 동네예보)";
     private static final String API_NAME = "기온";
     private static final String COLLECTOR_KEY = "kma-village-forecast-temperature";
+    private static final String OPERATION_KEY = "kma-village-forecast-vilage-fcst";
+    private static final String FACILITY_ID = "f101";
 
     @Mock
     private RawStagingStore rawStagingStore;
@@ -51,24 +53,24 @@ class PublicDataCollectionAttemptServiceTest {
     }
 
     @Test
-    void 수집_성공하면_레코드마다_raw_staging에_적재하고_성공_로그와_메트릭을_남긴다() throws CollectException {
+    void 수집_성공하면_이번_수집분_전체를_JSON_배열_행_1개로_raw_staging에_적재하고_성공_로그와_메트릭을_남긴다() throws CollectException {
         when(collector.sourceName()).thenReturn(SOURCE_NAME);
         when(collector.apiName()).thenReturn(API_NAME);
         when(collector.key()).thenReturn(COLLECTOR_KEY);
+        when(collector.operationKey()).thenReturn(OPERATION_KEY);
+        when(collector.facilityId()).thenReturn(FACILITY_ID);
         when(collector.collect()).thenReturn(List.of("{\"temp\":1}", "{\"temp\":2}"));
 
         service().run(collector, ExecutionType.SCHEDULE);
 
         ArgumentCaptor<RawStagingDto> rawCaptor = ArgumentCaptor.forClass(RawStagingDto.class);
-        verify(rawStagingStore, times(2)).insert(rawCaptor.capture());
-        assertThat(rawCaptor.getAllValues())
-            .extracting(RawStagingDto::getRawPayload)
-            .containsExactly("{\"temp\":1}", "{\"temp\":2}");
-        assertThat(rawCaptor.getAllValues())
-            .allSatisfy(dto -> {
-                assertThat(dto.getSourceName()).isEqualTo(SOURCE_NAME);
-                assertThat(dto.getApiName()).isEqualTo(API_NAME);
-            });
+        verify(rawStagingStore, times(1)).insert(rawCaptor.capture());
+        RawStagingDto dto = rawCaptor.getValue();
+        assertThat(dto.getRawPayload()).isEqualTo("[{\"temp\":1},{\"temp\":2}]");
+        assertThat(dto.getSourceName()).isEqualTo(SOURCE_NAME);
+        assertThat(dto.getApiName()).isEqualTo(API_NAME);
+        assertThat(dto.getOperationKey()).isEqualTo(OPERATION_KEY);
+        assertThat(dto.getFacilityId()).isEqualTo(FACILITY_ID);
 
         ArgumentCaptor<CollectionAttemptLogDto> logCaptor = ArgumentCaptor.forClass(CollectionAttemptLogDto.class);
         verify(collectionAttemptLogStore, times(1)).insert(logCaptor.capture());

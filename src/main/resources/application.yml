@@ -59,6 +59,9 @@ public-data:
       cron: "0 15 2,5,8,11,14,17,20,23 * * *"
     kma-weather-warning-list:
       cron: "0 */10 * * * *"
+  cleanse:
+    # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
+    cron: "0 */5 * * * *"
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

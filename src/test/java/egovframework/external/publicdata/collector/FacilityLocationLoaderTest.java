@@ -43,15 +43,15 @@ class FacilityLocationLoaderTest {
 
     @Test
     void 특정_기관이_기대한_격자좌표로_로딩된다() {
-        // 서울지방교정청 = f01, 경기도 과천시 대표좌표 (private-doc facility_grid_mapping.csv 기준)
+        // 경기도 과천시 대표좌표 (private-doc facility_grid_mapping.csv 기준).
+        // facilityId 채번 규칙이 바뀔 수 있으므로 기관명으로 찾는다(f01 같은 특정 ID를 고정 가정하지 않음).
         List<Location> locations = new FacilityLocationLoader().all();
 
         Location seoul = locations.stream()
-            .filter(loc -> loc.facilityId().equals("f01"))
+            .filter(loc -> loc.facilityName().equals("서울지방교정청"))
             .findFirst()
             .orElseThrow();
 
-        assertThat(seoul.facilityName()).isEqualTo("서울지방교정청");
         assertThat(seoul.nx()).isEqualTo("60");
         assertThat(seoul.ny()).isEqualTo("124");
     }

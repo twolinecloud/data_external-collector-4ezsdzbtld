@@ -33,6 +33,16 @@ public class KmaUltraSrtFcstCollector implements PublicDataCollector {
     }
 
     @Override
+    public String operationKey() {
+        return "kma-village-forecast-ultra-srt-fcst";
+    }
+
+    @Override
+    public String facilityId() {
+        return location.facilityId();
+    }
+
+    @Override
     public String sourceName() {
         return "공공데이터포털 (기상청 동네예보)";
     }

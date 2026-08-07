@@ -69,11 +69,17 @@ public class PublicDataCollectionAttemptService {
             return;
         }
 
-        for (String rawPayload : rawPayloads) {
+        // 항목(카테고리x시간) 하나마다 행을 만들지 않고, 이번 수집 1회 전체를 JSON 배열 하나로
+        // 묶어서 행 1개로 저장한다 - 단기예보 한 번에 900건 가까이 나오는데 그걸 낱개로 쌓으면
+        // 인메모리 스토어가 스케줄 몇 바퀴만 돌아도 무한정 불어남 (private-doc 27번 항목 참고).
+        if (!rawPayloads.isEmpty()) {
+            String combinedPayload = "[" + String.join(",", rawPayloads) + "]";
             RawStagingDto dto = RawStagingDto.builder()
                 .sourceName(sourceName)
                 .apiName(apiName)
-                .rawPayload(rawPayload)
+                .operationKey(collector.operationKey())
+                .facilityId(collector.facilityId())
+                .rawPayload(combinedPayload)
                 .build();
             rawStagingStore.insert(dto);
         }

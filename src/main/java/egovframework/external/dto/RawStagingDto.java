@@ -22,6 +22,11 @@ public class RawStagingDto {
     Long id;
     String sourceName;
     String apiName;
+    /** 정제 단계가 알맞은 PublicDataCleanser를 찾는 안정적 키 (PublicDataCollector.operationKey()). */
+    String operationKey;
+    /** 위치기반 수집이면 그 기관 facilityId, 아니면 null. */
+    String facilityId;
+    /** 이번 수집 1회 전체를 JSON 배열 문자열로 담음 (항목 하나당 행 하나가 아니라 수집 1회 = 행 1개). */
     String rawPayload;
     String status;
     String cleansedPayload;
