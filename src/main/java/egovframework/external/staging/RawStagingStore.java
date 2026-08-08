@@ -11,8 +11,8 @@ import java.util.List;
  * 중복실행 문제 해결 전까지는 단일 인스턴스 운용을 전제로 하고, admin-db 적재 방식이
  * 확정되면(직접 write 또는 admin-api 경유) DB/HTTP 기반 어댑터로 교체 가능하도록
  * 메서드 계약을 DB 저장을 가정한 형태(생성 ID, 상태 전이별 개별 메서드)로 유지한다.
- * (과거 raw_staging 테이블 DDL + MyBatis 매퍼 구현은 git 커밋 이력과 private-doc에
- * 백업되어 있음 - 되돌리려면 그걸 참고해서 이 인터페이스를 구현하면 됨)</p>
+ * (과거 raw_staging 테이블 DDL + MyBatis 매퍼 구현은 git 커밋 이력에 남아있음
+ * - 되돌리려면 그걸 참고해서 이 인터페이스를 구현하면 됨)</p>
  */
 public interface RawStagingStore {
 

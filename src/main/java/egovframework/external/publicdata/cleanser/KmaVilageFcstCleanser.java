@@ -13,7 +13,7 @@ import java.util.List;
 @Component
 public class KmaVilageFcstCleanser implements PublicDataCleanser {
 
-    /** 실측 응답에서 확인된 단기예보 카테고리 14종 (private-doc 26번 항목에서 실제 API로 확인). */
+    /** 실측 응답에서 확인된 단기예보 카테고리 14종 (실제 API로 확인). */
     private static final List<String> CATEGORIES =
         List.of("POP", "PTY", "PCP", "REH", "SNO", "SKY", "TMP", "TMN", "TMX", "UUU", "VEC", "VVV", "WAV", "WSD");
 

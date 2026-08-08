@@ -21,7 +21,7 @@ import java.util.List;
  * {@code @Scheduled} 메서드 하나였던 걸 그대로 유지하면서, 각 메서드 내부에서
  * {@link KmaLocationCollectorFactory}가 만든 지역별 인스턴스를 차례로 실행한다. 개별
  * 지역의 성공/실패는 여전히 {@link PublicDataCollectionAttemptService}가 각각 독립적으로
- * 기록한다 (private-doc 25번 항목 참고).</p>
+ * 기록한다.</p>
  *
  * <p>새 위치의존 소스를 추가할 때: {@code kma-facility-locations.csv}에 행만 추가하면
  * 됨 - 코드 변경 불필요. 새 오퍼레이션(위치독립)을 추가할 때: (1) {@code PublicDataCollector}

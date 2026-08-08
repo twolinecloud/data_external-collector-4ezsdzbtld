@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  * 대칭 구조 - 스케줄(자동)과 컨트롤러(수동) 양쪽이 이 서비스 하나를 공유한다.
  *
  * <p>정제기를 못 찾은 경우도 예외로 전체를 죽이지 않고 그 행만 CLEANSE_FAILED로 남긴다
- * (수집 실패를 그 소스만 격리시키는 것과 동일한 원칙 - private-doc 27번 항목 참고).</p>
+ * (수집 실패를 그 소스만 격리시키는 것과 동일한 원칙).</p>
  */
 @Service
 @RequiredArgsConstructor

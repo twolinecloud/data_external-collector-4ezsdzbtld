@@ -15,10 +15,14 @@ import java.util.stream.Collectors;
 /**
  * 모든 {@link PublicDataCollector}를 key로 조회할 수 있게 모아둔 레지스트리.
  *
- * <p>두 종류를 합쳐서 관리한다: (1) Spring이 관리하는 빈 - 새 소스를 추가할 때
+ * <p>
+ * 두 종류를 합쳐서 관리한다: (1) Spring이 관리하는 빈 - 새 소스를 추가할 때
  * {@link PublicDataCollector} 구현체에 {@code @Component}만 붙이면 자동으로 잡힘.
  * (2) {@link KmaLocationCollectorFactory}가 지역(59개소)×오퍼레이션 조합으로 만들어내는
- * 인스턴스 - Bean 177개를 등록하는 대신 팩토리 하나로 관리 (private-doc 25번 항목).</p>
+ * 인스턴스 - Bean 177개를 등록하는 대신 팩토리 하나로 관리
+ * 교정기관이 변경되는 경우 초기설계로는 resource의 csv를 변경하고 서비스를 다시 로딩함으로서 업데이트하도록 함.
+ * (hot-reload 아님)
+ * </p>
  */
 @Component
 public class PublicDataCollectorRegistry {
@@ -28,11 +32,11 @@ public class PublicDataCollectorRegistry {
     private final Map<String, PublicDataCollector> collectorsByKey;
 
     public PublicDataCollectorRegistry(List<PublicDataCollector> springManagedCollectors,
-                                        KmaLocationCollectorFactory locationCollectorFactory) {
+            KmaLocationCollectorFactory locationCollectorFactory) {
         List<PublicDataCollector> all = new ArrayList<>(springManagedCollectors);
         all.addAll(locationCollectorFactory.allLocationBasedCollectors());
         this.collectorsByKey = all.stream()
-            .collect(Collectors.toUnmodifiableMap(PublicDataCollector::key, Function.identity()));
+                .collect(Collectors.toUnmodifiableMap(PublicDataCollector::key, Function.identity()));
     }
 
     /** @throws NotFoundException key에 해당하는 수집기가 없는 경우 (HTTP 404로 매핑됨) */

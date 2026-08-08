@@ -12,7 +12,7 @@ import java.util.List;
 @Component
 public class KmaUltraSrtFcstCleanser implements PublicDataCleanser {
 
-    /** weather-api.docx 기준 초단기예보 카테고리 (private-doc 14번 항목). */
+    /** weather-api.docx 기준 초단기예보 카테고리. */
     private static final List<String> CATEGORIES =
         List.of("T1H", "RN1", "SKY", "UUU", "VVV", "REH", "PTY", "POP", "LGT", "VEC", "WSD");
 

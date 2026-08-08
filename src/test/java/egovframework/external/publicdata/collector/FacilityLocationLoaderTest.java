@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * classpath:kma-facility-locations.csv(전국 교정기관 59개소, private-doc 24/25번 항목)가
- * 정상 로딩되는지 검증. 이 CSV는 실제 운영 데이터라 개수/형식이 깨지면 수집 자체가 안 되므로
+ * classpath:kma-facility-locations.csv(전국 교정기관 59개소)가 정상 로딩되는지 검증.
+ * 이 CSV는 실제 운영 데이터라 개수/형식이 깨지면 수집 자체가 안 되므로
  * 기본적인 무결성(개수, 중복 없음, nx/ny 숫자 형식)을 테스트로 고정해둔다.
  */
 class FacilityLocationLoaderTest {
@@ -43,8 +43,8 @@ class FacilityLocationLoaderTest {
 
     @Test
     void 특정_기관이_기대한_격자좌표로_로딩된다() {
-        // 경기도 과천시 대표좌표 (private-doc facility_grid_mapping.csv 기준).
-        // facilityId 채번 규칙이 바뀔 수 있으므로 기관명으로 찾는다(f01 같은 특정 ID를 고정 가정하지 않음).
+        // 경기도 과천시 대표좌표. facilityId 채번 규칙이 바뀔 수 있으므로 기관명으로
+        // 찾는다(f01 같은 특정 ID를 고정 가정하지 않음).
         List<Location> locations = new FacilityLocationLoader().all();
 
         Location seoul = locations.stream()

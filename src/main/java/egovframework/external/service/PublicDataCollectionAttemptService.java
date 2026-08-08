@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>{@link RawStagingStore}/{@link CollectionAttemptLogStore}는 포트 인터페이스라 현재
  * 메모리 구현({@code InMemory*Store})에 의존하지만, 나중에 DB 어댑터로 교체해도 이 서비스는
- * 변경할 필요 없다 (private-doc 참고).</p>
+ * 변경할 필요 없다.</p>
  *
  * <p>관측성: {@code public_data_collect_attempts_total}(카운터, collectorKey/executionType/status
  * 태그) / {@code public_data_collect_duration_seconds}(타이머, collectorKey 태그)를
@@ -71,7 +71,7 @@ public class PublicDataCollectionAttemptService {
 
         // 항목(카테고리x시간) 하나마다 행을 만들지 않고, 이번 수집 1회 전체를 JSON 배열 하나로
         // 묶어서 행 1개로 저장한다 - 단기예보 한 번에 900건 가까이 나오는데 그걸 낱개로 쌓으면
-        // 인메모리 스토어가 스케줄 몇 바퀴만 돌아도 무한정 불어남 (private-doc 27번 항목 참고).
+        // 인메모리 스토어가 스케줄 몇 바퀴만 돌아도 무한정 불어남.
         if (!rawPayloads.isEmpty()) {
             String combinedPayload = "[" + String.join(",", rawPayloads) + "]";
             RawStagingDto dto = RawStagingDto.builder()

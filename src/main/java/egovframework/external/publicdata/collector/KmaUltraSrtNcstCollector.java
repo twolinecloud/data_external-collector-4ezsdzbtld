@@ -11,11 +11,11 @@ import java.util.Map;
  * 기상청 단기예보 조회서비스(VilageFcstInfoService_2.0) - getUltraSrtNcst(초단기실황조회).
  *
  * <p>한 번 호출로 T1H(기온)/RN1(1h강수량)/REH(습도)/PTY(강수형태)/VEC(풍향)/WSD(풍속)/UUU/VVV 등
- * 여러 category가 한 번에 응답됨 (카테고리별 분리는 정제 단계에서 처리 - private-doc 14번 참고).</p>
+ * 여러 category가 한 번에 응답됨 (카테고리별 분리는 정제 단계에서 처리).</p>
  *
  * <p>{@link Location}(전국 교정기관 59개소) 하나당 인스턴스 하나. Spring Bean이 아니라
  * {@link KmaLocationCollectorFactory}가 지역 수만큼 생성한다 - 59개 빈을 등록하는 대신
- * 팩토리 하나로 관리 (private-doc 25번 항목 참고).</p>
+ * 팩토리 하나로 관리.</p>
  */
 public class KmaUltraSrtNcstCollector implements PublicDataCollector {
 

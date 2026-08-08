@@ -12,7 +12,7 @@ import java.util.List;
  * <p>59×3=177개를 개별 {@code @Component} 빈으로 등록하는 대신, 이 팩토리 하나가 목록을
  * 만들어 {@code PublicDataCollectorRegistry}/{@code PublicDataCollectorScheduler}에
  * 공급한다. 지역이 추가/변경되면 {@code kma-facility-locations.csv}만 고치면 됨 - 코드
- * 변경 불필요 (private-doc 25번 항목 참고).</p>
+ * 변경 불필요.</p>
  */
 @Component
 public class KmaLocationCollectorFactory {

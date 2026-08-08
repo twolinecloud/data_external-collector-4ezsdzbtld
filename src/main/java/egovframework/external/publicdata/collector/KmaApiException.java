@@ -6,8 +6,8 @@ package egovframework.external.publicdata.collector;
  * <p>JSON 구조 자체가 깨진 "파싱 실패"와는 다른 문제 - API가 정상적으로 응답했지만
  * 업무적으로 실패(쿼터 초과, 인증 만료, 잘못된 파라미터 등)를 반환한 경우다. 이걸 구분해야
  * 실패 로그를 보고 "코드가 이상한가" vs "쿼터를 초과했나"를 바로 판단할 수 있다.
- * (에러코드 표는 weather-api.docx / data.go.kr 공개 스펙 기준, private-doc 14/15번 항목 참고.
- * 두 API의 코드 체계가 완전히 같진 않지만 겹치는 부분이 많아 통합 조회표로 관리)</p>
+ * (에러코드 표는 weather-api.docx / data.go.kr 공개 스펙 기준. 두 API의 코드 체계가
+ * 완전히 같진 않지만 겹치는 부분이 많아 통합 조회표로 관리)</p>
  */
 public class KmaApiException extends RuntimeException {
 

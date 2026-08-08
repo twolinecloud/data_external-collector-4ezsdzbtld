@@ -11,7 +11,7 @@ import java.util.List;
  * <p>{@code findUnclaimed}/{@code claimBatch}는 "소스별 독립 스케줄 수집" ↔ "카테고리 단위
  * 배치로 묶어서 정제/적재"를 잇는 접점으로 설계해둔 것 - 배치 오케스트레이터가 아직 없어
  * 현재는 호출되지 않지만, admin-db 적재 방식(tb_ext_collect_log 등) 확정 시 필요해질
- * 것으로 예상해 계약만 미리 정의해둠 (private-doc 참고).</p>
+ * 것으로 예상해 계약만 미리 정의해둠.</p>
  */
 public interface CollectionAttemptLogStore {
 

@@ -12,12 +12,12 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * {@code classpath:kma-facility-locations.csv}(전국 교정기관 59개소 격자좌표, private-doc
- * 24번 항목 산출물)를 읽어 {@link Location} 목록으로 제공.
+ * {@code classpath:kma-facility-locations.csv}(전국 교정기관 59개소 격자좌표)를 읽어
+ * {@link Location} 목록으로 제공.
  *
  * <p>CSV 컬럼: facilityId,facilityName,sido,sigungu,nx,ny. 격자좌표는 기상청 공식 매핑표
  * (2026-02 갱신본) 기준, 읍면동 단위 정밀매칭 실패 시 시/군/구 대표좌표로 폴백한 값 - 격자가
- * 5km 단위라 동 단위 오차는 실용적으로 무시 가능하다고 판단 (private-doc 참고).</p>
+ * 5km 단위라 동 단위 오차는 실용적으로 무시 가능하다고 판단.</p>
  */
 @Component
 public class FacilityLocationLoader {

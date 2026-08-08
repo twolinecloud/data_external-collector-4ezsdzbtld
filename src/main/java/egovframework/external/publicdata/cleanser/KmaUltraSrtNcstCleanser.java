@@ -15,7 +15,7 @@ import java.util.List;
 @Component
 public class KmaUltraSrtNcstCleanser implements PublicDataCleanser {
 
-    /** weather-api.docx 기준 초단기실황 카테고리 (private-doc 14번 항목). */
+    /** weather-api.docx 기준 초단기실황 카테고리. */
     private static final List<String> CATEGORIES = List.of("T1H", "RN1", "REH", "PTY", "VEC", "WSD", "UUU", "VVV");
 
     @Override
