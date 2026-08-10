@@ -59,6 +59,8 @@ public-data:
       cron: "0 15 2,5,8,11,14,17,20,23 * * *"
     kma-weather-warning-list:
       cron: "0 */10 * * * *"
+    moleg-criminal-law:
+      cron: "0 0 5 * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
@@ -72,3 +74,13 @@ public-data:
       # 위치의존 오퍼레이션의 지역 목록은 classpath:kma-facility-locations.csv (전국 교정기관 59개소,
       # private-doc 24/25번 항목 참고) - FacilityLocationLoader가 읽어서 KmaLocationCollectorFactory가
       # 오퍼레이션×지역 조합으로 컬렉터를 생성한다. 지역 추가/변경은 그 CSV만 고치면 됨.
+  # 법제처(국가법령정보센터) 형사법령정보 - private-doc 31번 항목 참고. LawSourcePort(포트)의
+  # 현재 활성 구현은 DirectLawSourceAdapter(직접연결) - 이 연결 자체가 ESB로 이동 예정이라
+  # 나중에 스펙이 나오면 이 설정 블록도 ESB 쪽으로 옮겨가고 어댑터만 교체하면 됨.
+  moleg:
+    endpoint: ${MOLEG_ENDPOINT:https://www.law.go.kr/DRF/lawService.do}
+    # OC(이용자ID)는 법제처에서 별도 발급받는 값 - 로컬 .env에만 있고 git엔 안 올라감
+    oc: ${MOLEG_OC:}
+    # 형사법령 목록은 classpath:moleg-criminal-laws.csv (모법 22개 + 시행령/시행규칙 22개,
+    # 총 44건) - MolegLawListLoader가 읽어서 MolegLawCollectorFactory가 법령별 컬렉터를
+    # 생성한다. 목록 추가/변경은 그 CSV만 고치면 됨.

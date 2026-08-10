@@ -3,6 +3,7 @@ package egovframework.external.publicdata.scheduler;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
 import egovframework.external.publicdata.collector.KmaWeatherWarningListCollector;
+import egovframework.external.publicdata.collector.MolegLawCollectorFactory;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.service.PublicDataCollectionAttemptService;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class PublicDataCollectorScheduler {
     private final PublicDataCollectionAttemptService collectionAttemptService;
     private final KmaLocationCollectorFactory locationCollectorFactory;
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
+    private final MolegLawCollectorFactory lawCollectorFactory;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-ncst.cron:0 12 * * * *}")
@@ -58,6 +60,16 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.kma-weather-warning-list.cron:0 */10 * * * *}")
     public void collectKmaWeatherWarningList() {
         collectionAttemptService.run(kmaWeatherWarningListCollector, ExecutionType.SCHEDULE);
+    }
+
+    /**
+     * 형사법령 본문조회: 하루 1회, 새벽 5시(부하 적은 시간대) - 44건 전체 순회 수집.
+     * 변경감지/이력누적은 아직 여기서 안 함(admin-db 쓰기 경로 확정 대기, private-doc 31번
+     * 항목) - 지금은 매번 전체를 raw_staging에 새로 적재하기만 함.
+     */
+    @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
+    public void collectMolegCriminalLaws() {
+        runAll(lawCollectorFactory.allLawCollectors());
     }
 
     private void runAll(List<PublicDataCollector> collectors) {
