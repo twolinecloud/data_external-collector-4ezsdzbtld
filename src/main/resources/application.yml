@@ -64,6 +64,11 @@ public-data:
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
+    json-drop:
+      # 정제 결과를 로컬 파일로 즉시 내려받는 디버그/뷰어 전용 부가 기능 (CleansedJsonDropWriter).
+      # 기본 꺼짐 - admin-db 적재 전까지 정제 결과를 눈으로 확인할 방법이 없어서 추가함, 운영에는 영향 없음.
+      enabled: ${PUBLIC_DATA_CLEANSE_JSON_DROP_ENABLED:false}
+      dir: ${PUBLIC_DATA_CLEANSE_JSON_DROP_DIR:private-doc/cleansed-json-drop}
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

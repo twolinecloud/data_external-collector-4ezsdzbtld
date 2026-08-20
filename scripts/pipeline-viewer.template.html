@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>공공데이터 파이프라인 - 정제 결과 뷰어</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --border: #dfe3e8; --text: #1f2430;
+    --muted: #6b7280; --accent: #2563eb; --accent-bg: #eaf1fe;
+    --code-bg: #0f172a; --code-text: #e2e8f0; --row-alt: #f8fafc; --heading-bg: #f1f5f9;
+    --json-key: #93c5fd; --json-str: #86efac; --json-num: #fca5a5; --json-bool: #fcd34d; --json-null: #94a3b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161c; --panel: #1c1f28; --border: #2c3140; --text: #e5e7eb;
+      --muted: #9aa1ae; --accent: #60a5fa; --accent-bg: #1e2a44;
+      --code-bg: #0b0e14; --code-text: #dbe4f0; --row-alt: #20242f; --heading-bg: #232838;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .top-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .top-tab {
+    padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel); cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text);
+  }
+  .top-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .group { display: none; }
+  .group.active { display: block; }
+  .sub-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .sub-tab {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--panel); cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .sub-tab.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .sub-tab.missing { opacity: 0.5; border-style: dashed; }
+  .panel { display: none; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel.active { display: block; }
+  .panel-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .panel-title { font-size: 15px; font-weight: 700; }
+  .panel-sub { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .panel-header-right { display: flex; align-items: center; gap: 10px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+  .empty-note { color: var(--muted); font-size: 13px; padding: 12px 0; }
+
+  /* JSON/UI 뷰 토글 */
+  .view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .view-toggle button {
+    border: none; background: var(--panel); color: var(--muted); font-size: 12px; font-weight: 600;
+    padding: 5px 12px; cursor: pointer;
+  }
+  .view-toggle button.active { background: var(--accent); color: #fff; }
+  .view-ui, .view-json { display: none; }
+  .view-ui.active, .view-json.active { display: block; }
+
+  pre.json {
+    background: var(--code-bg); color: var(--code-text); padding: 14px; border-radius: 8px;
+    overflow: auto; max-height: 70vh; font-size: 12.5px; line-height: 1.55;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    white-space: pre;
+  }
+  .jk { color: var(--json-key); } .js { color: var(--json-str); } .jn { color: var(--json-num); }
+  .jb { color: var(--json-bool); } .jz { color: var(--json-null); }
+
+  /* 사람이 보는 UI 뷰 - 공통 */
+  .scroll-box { max-height: 70vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th, table.data-table td {
+    padding: 7px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border);
+  }
+  table.data-table thead th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 600; z-index: 1; }
+  table.data-table tbody tr:nth-child(even) { background: var(--row-alt); }
+  table.data-table td.na { color: var(--muted); }
+
+  /* 카드형(단일 레코드) */
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .field-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--row-alt); }
+  .field-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .field-value { font-size: 16px; font-weight: 700; }
+
+  /* 법령 헤더 카드 */
+  .law-header { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--row-alt); margin-bottom: 14px; }
+  .law-title { font-size: 18px; font-weight: 800; margin-bottom: 8px; }
+  .law-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; font-size: 13px; }
+  .law-fields dt { color: var(--muted); font-size: 11px; }
+  .law-fields dd { margin: 0; font-weight: 600; }
+  .law-fields dd.law-clickable {
+    color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .law-fields dd.law-clickable:hover { text-decoration-style: solid; }
+  .law-fields dd.law-clickable::after { content: '↗'; font-size: 11px; opacity: 0.7; }
+  .law-fields dd.law-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; font-size: 12px; color: var(--muted); }
+
+  /* 제개정이유/개정문 모달 */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+    align-items: center; justify-content: center; padding: 24px; z-index: 100;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    max-width: 720px; width: 100%; max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 15px; font-weight: 700; }
+  .modal-close { background: none; border: none; font-size: 18px; color: var(--muted); cursor: pointer; line-height: 1; padding: 4px; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 16px 18px; overflow: auto; font-size: 13px; line-height: 1.8; }
+  .modal-section-title { font-weight: 700; font-size: 12.5px; color: var(--muted); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .modal-section-title:first-child { margin-top: 0; }
+  .modal-body p { margin: 0 0 4px; white-space: pre-wrap; }
+
+  /* rule-alert 등급 배지 */
+  .lvl { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .lvl:hover { filter: brightness(0.93); }
+  .rule-legend-btn {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600;
+    color: var(--accent); background: none; border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 10px; cursor: pointer;
+  }
+  .rule-legend-btn:hover { background: var(--accent-bg); }
+  .kv-line { display: flex; gap: 8px; }
+  .kv-line .k { color: var(--muted); min-width: 110px; flex-shrink: 0; }
+  .kv-line .v { font-weight: 600; }
+  .lvl-none { background: var(--row-alt); color: var(--muted); }
+  .lvl-info { background: #dbeafe; color: #1d4ed8; }
+  .lvl-caution { background: #fef3c7; color: #b45309; }
+  .lvl-watch { background: #fed7aa; color: #c2410c; }
+  .lvl-severe { background: #fecaca; color: #b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    .lvl-info { background: #1e3a5f; color: #93c5fd; }
+    .lvl-caution { background: #4a3a12; color: #fcd34d; }
+    .lvl-watch { background: #532e12; color: #fdba74; }
+    .lvl-severe { background: #4c1414; color: #fca5a5; }
+  }
+  tr.alerting { font-weight: 600; }
+
+  /* 법령 조문 목록 */
+  .article-list { display: flex; flex-direction: column; gap: 8px; }
+  .article-heading { font-weight: 800; font-size: 13.5px; background: var(--heading-bg); padding: 6px 10px; border-radius: 6px; margin-top: 8px; }
+  .article-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .article-no { font-weight: 700; font-size: 13.5px; margin-bottom: 4px; }
+  .article-ref { color: var(--muted); font-size: 11px; margin-left: 6px; font-weight: 400; }
+  .article-body { font-size: 13px; line-height: 1.7; }
+  .article-clause { margin-left: 4px; }
+  .article-item { margin-left: 18px; color: var(--text); opacity: 0.92; }
+</style>
+</head>
+<body>
+  <h1>공공데이터 파이프라인 - 정제(Cleanse) 결과 뷰어</h1>
+  <div class="meta" id="meta"></div>
+  <div class="top-tabs" id="top-tabs"></div>
+  <div id="groups"></div>
+
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title"></div>
+        <button class="modal-close" id="modal-close" aria-label="닫기">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+<script>
+const DATA = /*__PIPELINE_VIEWER_DATA__*/null;
+
+/* ---------- 공통 유틸 ---------- */
+
+function escHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+function fmtDate(d, t) {
+  // "20260813" + "0700" -> "2026-08-13 07:00"
+  if (!d) return '-';
+  const date = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`;
+  if (!t) return date;
+  return `${date} ${t.slice(0,2)}:${t.slice(2,4)}`;
+}
+
+// 아주 단순한 JSON 문법강조 - 외부 라이브러리 없이 정규식으로 토큰별 색만 입힌다
+function highlightJson(obj) {
+  const text = JSON.stringify(obj, null, 2);
+  const escaped = escHtml(text);
+  return escaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    (match) => {
+      if (/^"/.test(match)) {
+        return /:$/.test(match) ? `<span class="jk">${match}</span>` : `<span class="js">${match}</span>`;
+      }
+      if (/true|false/.test(match)) return `<span class="jb">${match}</span>`;
+      if (/null/.test(match)) return `<span class="jz">${match}</span>`;
+      return `<span class="jn">${match}</span>`;
+    }
+  );
+}
+
+function recordCount(json) {
+  if (Array.isArray(json)) return json.length;
+  return null;
+}
+
+// "제개정이유내용"/"개정문내용"처럼 [[줄,줄,...]] 형태로 중첩된 배열을 문단(줄) 목록으로 펼침
+function extractParagraphs(obj, key) {
+  if (!obj || !obj[key]) return [];
+  return obj[key].flat(Infinity).filter(line => typeof line === 'string' && line.trim() !== '');
+}
+
+/* ---------- 모달 (제개정이유/개정문) ---------- */
+
+function showModal(title, bodyHtml) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal-backdrop').classList.add('active');
+}
+
+function openModal(title, paragraphSections) {
+  const html = paragraphSections.map(section => {
+    const paras = section.paragraphs.length
+      ? section.paragraphs.map(p => `<p>${escHtml(p)}</p>`).join('')
+      : '<p style="color:var(--muted);">내용 없음</p>';
+    return `<div class="modal-section-title">${escHtml(section.title)}</div>${paras}`;
+  }).join('');
+  showModal(title, html);
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('active');
+}
+
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-backdrop') closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+/* ---------- 기상청 코드 디코딩 (공식 코드표만 - PCP/WSD 강도 라벨링은 UI 프론트 담당으로 확정돼 여기 없음, task-spec 29번 항목 2026-08-13 추가 확정 참고) ---------- */
+
+const SKY_LABELS = { '1': '맑음', '3': '구름많음', '4': '흐림' };
+const PTY_LABELS = { '0': '없음', '1': '비', '2': '비/눈', '3': '눈', '4': '소나기', '5': '빗방울', '6': '빗방울눈날림', '7': '눈날림' };
+
+const CATEGORY_ORDER = ['sky', 'pty', 'tmp', 't1h', 'tmn', 'tmx', 'pop', 'pcp', 'rn1', 'reh', 'wsd', 'vec', 'sno', 'wav', 'lgt'];
+const CATEGORY_LABEL = {
+  sky: '하늘상태', pty: '강수형태', tmp: '기온', t1h: '기온', tmn: '최저기온', tmx: '최고기온',
+  pop: '강수확률', pcp: '강수량', rn1: '강수량(1h)', reh: '습도', wsd: '풍속', vec: '풍향',
+  sno: '적설', wav: '파고', lgt: '낙뢰', uuu: '동서바람성분', vvv: '남북바람성분',
+};
+
+function fmtCatValue(key, value) {
+  if (value === null || value === undefined) return null;
+  if (key === 'sky') return SKY_LABELS[value] || value;
+  if (key === 'pty') return PTY_LABELS[value] || value;
+  if (key === 'tmp' || key === 't1h' || key === 'tmn' || key === 'tmx') return `${value}℃`;
+  if (key === 'reh' || key === 'pop') return `${value}%`;
+  if (key === 'wsd') return `${value}m/s`;
+  if (key === 'vec') return `${value}°`;
+  if (key === 'wav') return `${value}m`;
+  return value; // pcp/rn1/sno/lgt 등은 이미 사람이 읽는 문자열("강수없음" 등)이라 그대로
+}
+
+/* ---------- UI 뷰 렌더러 (kind별) ---------- */
+
+function renderWeatherNcst(json) {
+  if (!Array.isArray(json) || json.length === 0) return '<div class="empty-note">데이터 없음</div>';
+  const row = json[0];
+  const cards = ['t1h', 'reh', 'pty', 'rn1', 'vec', 'wsd'].map(key => {
+    const val = fmtCatValue(key, row[key]);
+    return `<div class="field-card">
+      <div class="field-label">${CATEGORY_LABEL[key] || key}</div>
+      <div class="field-value">${val === null ? '–' : escHtml(val)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="panel-sub" style="margin-bottom:10px;">관측시각: ${fmtDate(row.baseDate, row.baseTime)} · 지점(nx,ny): ${row.nx}, ${row.ny}</div>
+    <div class="field-grid">${cards}</div>`;
+}
+
+function renderWeatherFcst(json) {
+  if (!Array.isArray(json) || json.length === 0) return '<div class="empty-note">데이터 없음</div>';
+  const presentKeys = CATEGORY_ORDER.filter(k => Object.prototype.hasOwnProperty.call(json[0], k));
+  const head = `<tr><th>예보시각</th>${presentKeys.map(k => `<th>${CATEGORY_LABEL[k] || k}</th>`).join('')}</tr>`;
+  const rows = json.map(row => {
+    const cells = presentKeys.map(k => {
+      const val = fmtCatValue(k, row[k]);
+      return val === null ? '<td class="na">–</td>' : `<td>${escHtml(val)}</td>`;
+    }).join('');
+    return `<tr><td>${fmtDate(row.fcstDate, row.fcstTime)}</td>${cells}</tr>`;
+  }).join('');
+  return `<div class="scroll-box"><table class="data-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderWeatherWarning(json) {
+  if (!Array.isArray(json) || json.length === 0) return '<div class="empty-note">데이터 없음</div>';
+  const head = '<tr><th>발표시각</th><th>발표번호</th><th>지점</th><th>제목</th></tr>';
+  const rows = json.map(row => `<tr>
+      <td>${escHtml(fmtDate(String(row.tmFc).slice(0,8), String(row.tmFc).slice(8,12)))}</td>
+      <td>${escHtml(row.tmSeq)}</td>
+      <td>${escHtml(row.stnId)}</td>
+      <td style="white-space:normal;">${escHtml(row.title)}</td>
+    </tr>`).join('');
+  return `<div class="scroll-box"><table class="data-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderLaw(json) {
+  if (!Array.isArray(json) || json.length === 0 || !json[0]['법령']) return '<div class="empty-note">데이터 없음</div>';
+  const law = json[0]['법령'];
+  const info = law['기본정보'] || {};
+  const dept = (info['소관부처'] && info['소관부처'].content) || '-';
+  const lawType = (info['법종구분'] && info['법종구분'].content) || '-';
+
+  const header = `<div class="law-header">
+    <div class="law-title">${escHtml(info['법령명_한글'] || '(법령명 없음)')}</div>
+    <dl class="law-fields">
+      <div><dt>법종구분</dt><dd>${escHtml(lawType)}</dd></div>
+      <div><dt>소관부처</dt><dd>${escHtml(dept)}</dd></div>
+      <div><dt>공포일자</dt><dd>${escHtml(fmtDate(info['공포일자']))}</dd></div>
+      <div><dt>시행일자</dt><dd>${escHtml(fmtDate(info['시행일자']))}</dd></div>
+      <div><dt>공포번호</dt><dd>${escHtml(info['공포번호'] || '-')}</dd></div>
+      <div><dt>제개정구분</dt><dd class="law-clickable" data-role="amendment-trigger">${escHtml(info['제개정구분'] || '-')}</dd></div>
+      <div><dt>법령키</dt><dd class="law-key">${escHtml(law['법령키'] || '-')}</dd></div>
+    </dl>
+  </div>`;
+
+  const units = ((law['조문'] || {})['조문단위']) || [];
+  const list = units.map(u => {
+    if (u['조문여부'] !== '조문') {
+      const text = (u['조문내용'] || '').trim();
+      return text ? `<div class="article-heading">${escHtml(text)}</div>` : '';
+    }
+    const no = u['조문번호'];
+    const br = u['조문가지번호'];
+    const noLabel = `제${no}조${br ? '의' + br : ''}`;
+    const title = u['조문제목'] ? `(${u['조문제목']})` : '';
+    const ref = u['조문참고자료'] ? `<span class="article-ref">${escHtml(u['조문참고자료'])}</span>` : '';
+
+    let body = `<div>${escHtml(u['조문내용'] || '')}</div>`;
+    const clauses = u['항'];
+    if (Array.isArray(clauses)) {
+      body = clauses.map(c => {
+        let clauseHtml = `<div class="article-clause">${escHtml(c['항내용'] || '')}</div>`;
+        if (Array.isArray(c['호'])) {
+          clauseHtml += c['호'].map(h => `<div class="article-item">${escHtml(h['호내용'] || '')}</div>`).join('');
+        }
+        return clauseHtml;
+      }).join('');
+    }
+
+    return `<div class="article-card">
+      <div class="article-no">${escHtml(noLabel)}${escHtml(title)}${ref}</div>
+      <div class="article-body">${body}</div>
+    </div>`;
+  }).join('');
+
+  return `${header}<div class="scroll-box" style="max-height:60vh;"><div class="article-list" style="padding:10px;">${list}</div></div>`;
+}
+
+function renderDisasterMsg(json) {
+  if (!Array.isArray(json) || json.length === 0) {
+    return '<div class="empty-note">매칭된 재난문자가 없습니다 (전국 문자 중 59개 교정기관 소재지와 겹치는 게 없었다는 뜻 - DisasterMsgCleanser 참고).</div>';
+  }
+  const head = '<tr><th>생성시각</th><th>기관ID</th><th>매칭지역</th><th>단계</th><th>구분</th><th>내용</th></tr>';
+  const rows = json
+    .slice()
+    .sort((a, b) => String(b.crtDtm).localeCompare(String(a.crtDtm)))
+    .map(row => `<tr>
+      <td>${escHtml(row.crtDtm || '-')}</td>
+      <td>${escHtml(row.facilityId)}</td>
+      <td>${escHtml(row.matchedRegionNm || '-')}</td>
+      <td>${escHtml(row.emrgStepNm || '-')}</td>
+      <td>${escHtml(row.dstSeNm || '-')}</td>
+      <td style="white-space:normal;">${escHtml(row.msgCn || '-')}</td>
+    </tr>`).join('');
+  return `<div class="scroll-box"><table class="data-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+const HAZARD_LABEL = { LANDSLIDE: '산사태', FLOOD: '침수' };
+const VULN_LABEL = { LOW: '낮음', MEDIUM: '중간', HIGH: '높음' };
+const TRIGGER_LABEL = { NONE: '없음', RAIN_INTENSE: '단시간집중', RAIN_WARN: '호우주의보급', RAIN_ALERT: '호우경보급' };
+const LEVEL_CLASS = { NONE: 'lvl-none', INFO: 'lvl-info', CAUTION: 'lvl-caution', WATCH: 'lvl-watch', SEVERE: 'lvl-severe' };
+const LEVEL_ORDER = ['NONE', 'INFO', 'CAUTION', 'WATCH', 'SEVERE'];
+const LEVEL_KO = { NONE: '없음', INFO: '정보', CAUTION: '주의', WATCH: '경계', SEVERE: '심각' };
+const SOURCE_LABEL = { disasterMsg: '재난문자(행안부)', weatherWarning: '기상특보(기상청)' };
+
+// private-doc/terrain-rule-base-spec.md §4.1 매트릭스를 그대로 미러링 (설명용 - 실제 판정은 서버의 HazardAlertMatrix가 함)
+const BASE_MATRIX = {
+  LOW:    { NONE: 'NONE', RAIN_INTENSE: 'NONE',    RAIN_WARN: 'INFO',    RAIN_ALERT: 'CAUTION' },
+  MEDIUM: { NONE: 'NONE', RAIN_INTENSE: 'INFO',    RAIN_WARN: 'CAUTION', RAIN_ALERT: 'WATCH' },
+  HIGH:   { NONE: 'NONE', RAIN_INTENSE: 'CAUTION', RAIN_WARN: 'WATCH',   RAIN_ALERT: 'SEVERE' },
+};
+
+function baseLevelOf(vuln, trigger) {
+  return (BASE_MATRIX[vuln] || {})[trigger] || 'NONE';
+}
+
+function openRuleLegend() {
+  openModal('Rule 알림 - 용어 설명', [
+    { title: '기상트리거 (시설 자체 강수량 계산)', paragraphs: [
+      '이 시설의 격자(초단기실황·초단기예보·단기예보) 강수량을 모아 최근 1/3/12시간 누적을 계산해서 정합니다.',
+      '없음 : 특이사항 없음',
+      '단시간집중(RAIN_INTENSE) : 최근 1시간 강수량 30mm 이상',
+      '호우주의보급(RAIN_WARN) : 최근 3시간 60mm 이상 또는 12시간 110mm 이상 (기상청 호우주의보 기준을 그대로 적용)',
+      '호우경보급(RAIN_ALERT) : 최근 3시간 90mm 이상 또는 12시간 180mm 이상 (기상청 호우경보 기준)',
+    ] },
+    { title: '지역신호 (외부 경보)', paragraphs: [
+      '이 시설이 속한 지역에 해당 재해로 발효 중인 외부 경보가 있으면 켜집니다. 출처가 2곳입니다.',
+      '재난문자(행안부) : 시군구 단위, 산사태·호우 둘 다 매칭',
+      '기상특보(기상청) : 시도 단위(재난문자보다 넓음), title에서 "호우"만 인식해서 침수에만 매칭 - 산사태는 기상청이 아니라 산림청 소관이라 기상특보 자체에 없습니다',
+      '둘 중 하나라도 켜지면 지역신호=있음 이고, 두 곳 다 켜져도 등급 상향은 한 단계뿐입니다.',
+    ] },
+    { title: '등급 산출 방식', paragraphs: [
+      '이 시설의 지형 기반 정적 취약도(산사태/침수 각각 낮음·중간·높음, private-doc/facility-terrain.csv)와 기상트리거를 표에 대입해 기본등급을 정합니다.',
+      '지역신호가 있으면 기본등급에서 한 단계를 올립니다(이미 "심각"이면 더 안 올라감).',
+      '심각도 순서: 없음 → 정보 → 주의 → 경계 → 심각',
+      '"정보"가 뜨는 대표 사례: 취약도가 낮은 시설인데 지역신호만 켜진 경우 - "없음"에서 한 단계 오른 것입니다. 이 시설 자체의 지형·기상 조건은 아직 낮다는 뜻이라 실제 위험 단계는 아니지만, 인근 지역에 경보가 떠 있으니 참고하라는 신호입니다.',
+      '행별 등급 배지를 클릭하면 그 시설·재해의 계산 과정을 볼 수 있습니다.',
+    ] },
+  ]);
+}
+
+function openRuleDetail(row) {
+  const base = baseLevelOf(row.vulnerability, row.weatherTrigger);
+  const sources = (row.regionSources || []).map(s => SOURCE_LABEL[s] || s);
+  const lines = [
+    `<div class="kv-line"><span class="k">취약도</span><span class="v">${escHtml(VULN_LABEL[row.vulnerability] || row.vulnerability)}</span></div>`,
+    `<div class="kv-line"><span class="k">기상트리거</span><span class="v">${escHtml(TRIGGER_LABEL[row.weatherTrigger] || row.weatherTrigger)}</span></div>`,
+    `<div class="kv-line"><span class="k">→ 기본등급</span><span class="v">${LEVEL_KO[base]}</span></div>`,
+    `<div class="kv-line"><span class="k">지역신호</span><span class="v">${row.regionTriggered ? `있음 (${escHtml(sources.join(', '))})` : '없음'}</span></div>`,
+    `<div class="kv-line"><span class="k">→ 최종등급</span><span class="v"><span class="lvl ${LEVEL_CLASS[row.level]}">${escHtml(row.levelLabel || row.level)}</span>${row.regionTriggered && base !== row.level ? ' (지역신호로 한 단계 상향)' : ''}</span></div>`,
+  ];
+  showModal(`${row.facilityId} · ${HAZARD_LABEL[row.hazardType] || row.hazardType} 등급 계산`,
+    `<div class="modal-section-title">계산 과정</div>${lines.join('')}`);
+}
+
+function renderRuleAlert(json) {
+  if (!Array.isArray(json) || json.length === 0) return '<div class="empty-note">데이터 없음</div>';
+  const alerting = json.filter(r => r.level !== 'NONE').length;
+  const head = '<tr><th>기관ID</th><th>재해</th><th>취약도</th><th>기상트리거</th><th>지역신호</th><th>등급</th></tr>';
+  const sorted = json.slice().sort((a, b) => LEVEL_ORDER.indexOf(b.level) - LEVEL_ORDER.indexOf(a.level));
+  const rows = sorted.map(row => {
+    const sources = (row.regionSources || []).map(s => SOURCE_LABEL[s] || s).join(', ');
+    return `<tr class="${row.level !== 'NONE' ? 'alerting' : ''}">
+      <td>${escHtml(row.facilityId)}</td>
+      <td>${escHtml(HAZARD_LABEL[row.hazardType] || row.hazardType)}</td>
+      <td>${escHtml(VULN_LABEL[row.vulnerability] || row.vulnerability)}</td>
+      <td>${escHtml(TRIGGER_LABEL[row.weatherTrigger] || row.weatherTrigger)}</td>
+      <td>${row.regionTriggered ? escHtml(sources) : '<span class="na">-</span>'}</td>
+      <td><span class="lvl ${LEVEL_CLASS[row.level] || ''}" data-role="rule-detail" data-facility="${escHtml(row.facilityId)}" data-hazard="${escHtml(row.hazardType)}">${escHtml(row.levelLabel || row.level)}</span></td>
+    </tr>`;
+  }).join('');
+  return `<div class="panel-sub" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;">
+      <span>전체 ${json.length}건 중 알림 발생 ${alerting}건 (등급 순 정렬) · 등급 배지를 클릭하면 계산 과정을 볼 수 있습니다</span>
+      <button type="button" class="rule-legend-btn" data-role="rule-legend">ⓘ 용어 설명</button>
+    </div>
+    <div class="scroll-box"><table class="data-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+}
+
+const KIND_RENDERERS = {
+  'weather-ncst': renderWeatherNcst,
+  'weather-fcst': renderWeatherFcst,
+  'weather-warning': renderWeatherWarning,
+  'law': renderLaw,
+  'disaster-msg': renderDisasterMsg,
+  'rule-alert': renderRuleAlert,
+};
+
+function renderUiView(item) {
+  const fn = KIND_RENDERERS[item.kind];
+  if (!fn) return '<div class="empty-note">이 데이터 종류의 UI 뷰는 아직 없습니다 - JSON 뷰를 확인하세요.</div>';
+  try {
+    return fn(item.json);
+  } catch (e) {
+    return `<div class="empty-note">UI 렌더링 실패 (${escHtml(e.message)}) - JSON 뷰를 확인하세요.</div>`;
+  }
+}
+
+/* ---------- 탭/패널 골격 ---------- */
+
+function render() {
+  document.getElementById('meta').textContent =
+    `생성: ${DATA.generatedAt} · 서버: ${DATA.baseUrl} · scripts/force-collect-cleanse.sh 로 재생성`;
+
+  const topTabsEl = document.getElementById('top-tabs');
+  const groupsEl = document.getElementById('groups');
+
+  DATA.groups.forEach((group, gi) => {
+    const topBtn = document.createElement('button');
+    topBtn.className = 'top-tab' + (gi === 0 ? ' active' : '');
+    topBtn.textContent = group.label;
+    topBtn.onclick = () => selectGroup(gi);
+    topTabsEl.appendChild(topBtn);
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'group' + (gi === 0 ? ' active' : '');
+    groupEl.id = `group-${gi}`;
+
+    const subTabsEl = document.createElement('div');
+    subTabsEl.className = 'sub-tabs';
+
+    group.items.forEach((item, ii) => {
+      const subBtn = document.createElement('button');
+      subBtn.className = 'sub-tab' + (ii === 0 ? ' active' : '') + (item.found ? '' : ' missing');
+      subBtn.textContent = item.label + (item.found ? '' : ' (없음)');
+      subBtn.onclick = () => selectItem(gi, ii);
+      subTabsEl.appendChild(subBtn);
+
+      const panel = document.createElement('div');
+      panel.className = 'panel' + (ii === 0 ? ' active' : '');
+      panel.id = `panel-${gi}-${ii}`;
+
+      const count = item.found ? recordCount(item.json) : null;
+      const hasUiRenderer = Boolean(KIND_RENDERERS[item.kind]);
+
+      panel.innerHTML = `
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">${item.label}</div>
+            <div class="panel-sub">collectorKey = ${item.collectorKey}</div>
+          </div>
+          <div class="panel-header-right">
+            ${count !== null ? `<span class="badge">${count}건</span>` : ''}
+            ${item.found ? `<div class="view-toggle" data-panel="${gi}-${ii}">
+                <button data-view="ui" class="${hasUiRenderer ? 'active' : ''}" ${hasUiRenderer ? '' : 'disabled'}>UI</button>
+                <button data-view="json" class="${hasUiRenderer ? '' : 'active'}">JSON</button>
+              </div>` : ''}
+          </div>
+        </div>
+        ${item.found ? `
+          <div class="view-ui${hasUiRenderer ? ' active' : ''}">${renderUiView(item)}</div>
+          <div class="view-json${hasUiRenderer ? '' : ' active'}"><pre class="json">${highlightJson(item.json)}</pre></div>
+        ` : `<div class="empty-note">이 키로 드롭된 JSON 파일이 아직 없습니다 - scripts/force-collect-cleanse.sh 를 먼저 실행하세요.</div>`}
+      `;
+
+      const toggle = panel.querySelector('.view-toggle');
+      if (toggle) {
+        toggle.querySelectorAll('button').forEach(btn => {
+          btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            panel.querySelector('.view-ui').classList.toggle('active', btn.dataset.view === 'ui');
+            panel.querySelector('.view-json').classList.toggle('active', btn.dataset.view === 'json');
+          });
+        });
+      }
+
+      if (item.found && item.kind === 'rule-alert') {
+        const legendBtn = panel.querySelector('[data-role="rule-legend"]');
+        if (legendBtn) legendBtn.addEventListener('click', openRuleLegend);
+
+        panel.querySelectorAll('[data-role="rule-detail"]').forEach(badge => {
+          badge.addEventListener('click', () => {
+            const row = item.json.find(r =>
+              r.facilityId === badge.dataset.facility && r.hazardType === badge.dataset.hazard);
+            if (row) openRuleDetail(row);
+          });
+        });
+      }
+
+      if (item.found && item.kind === 'law') {
+        const trigger = panel.querySelector('[data-role="amendment-trigger"]');
+        if (trigger) {
+          trigger.addEventListener('click', () => {
+            const law = item.json[0]['법령'];
+            const info = law['기본정보'] || {};
+            openModal(`${info['법령명_한글'] || '법령'} - 제개정이유`, [
+              { title: '제개정이유', paragraphs: extractParagraphs(law['제개정이유'], '제개정이유내용') },
+              { title: '개정문', paragraphs: extractParagraphs(law['개정문'], '개정문내용') },
+            ]);
+          });
+        }
+      }
+
+      groupEl.appendChild(panel);
+    });
+
+    groupEl.insertBefore(subTabsEl, groupEl.firstChild);
+    groupsEl.appendChild(groupEl);
+  });
+}
+
+function selectGroup(gi) {
+  document.querySelectorAll('.top-tab').forEach((el, i) => el.classList.toggle('active', i === gi));
+  document.querySelectorAll('.group').forEach((el, i) => el.classList.toggle('active', i === gi));
+}
+
+function selectItem(gi, ii) {
+  const groupEl = document.getElementById(`group-${gi}`);
+  groupEl.querySelectorAll('.sub-tab').forEach((el, i) => el.classList.toggle('active', i === ii));
+  groupEl.querySelectorAll('.panel').forEach(el => el.classList.remove('active'));
+  document.getElementById(`panel-${gi}-${ii}`).classList.add('active');
+}
+
+render();
+</script>
+</body>
+</html>

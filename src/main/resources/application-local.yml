@@ -5,3 +5,9 @@ swagger-ui:
 logging:
   config: classpath:log4j2-spring.yml
 
+public-data:
+  cleanse:
+    json-drop:
+      # 로컬 개발에서는 기본으로 켜둠 - 정제 결과를 바로 파일로 확인할 수 있게 (scripts/force-collect-cleanse.sh 참고)
+      enabled: true
+
