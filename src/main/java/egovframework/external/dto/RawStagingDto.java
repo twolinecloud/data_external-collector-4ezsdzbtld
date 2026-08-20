@@ -26,6 +26,13 @@ public class RawStagingDto {
     String operationKey;
     /** 위치기반 수집이면 그 기관 facilityId, 아니면 null. */
     String facilityId;
+    /**
+     * 컬렉터 인스턴스 하나를 유일하게 가리키는 키 (PublicDataCollector.key()). operationKey는
+     * 오퍼레이션 단위(여러 인스턴스가 공유)라 facilityId가 null인 소스(예: 법령 44건 - 전부
+     * operationKey="moleg-criminal-law")끼리는 서로 구분이 안 되는데, 이 값은 항상 유일함
+     * (예: "moleg-criminal-law--001692", "kma-village-forecast-vilage-fcst--1270280").
+     */
+    String collectorKey;
     /** 이번 수집 1회 전체를 JSON 배열 문자열로 담음 (항목 하나당 행 하나가 아니라 수집 1회 = 행 1개). */
     String rawPayload;
     String status;
