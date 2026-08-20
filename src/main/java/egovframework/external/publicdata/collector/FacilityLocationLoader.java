@@ -15,9 +15,16 @@ import java.util.List;
  * {@code classpath:kma-facility-locations.csv}(전국 교정기관 59개소 격자좌표)를 읽어
  * {@link Location} 목록으로 제공.
  *
- * <p>CSV 컬럼: facilityId,facilityName,sido,sigungu,nx,ny. 격자좌표는 기상청 공식 매핑표
- * (2026-02 갱신본) 기준, 읍면동 단위 정밀매칭 실패 시 시/군/구 대표좌표로 폴백한 값 - 격자가
- * 5km 단위라 동 단위 오차는 실용적으로 무시 가능하다고 판단.</p>
+ * <p>CSV 컬럼: facilityId,facilityName,sido,sigungu,nx,ny,lat,lon. 이 로더는 nx,ny만 읽는다
+ * (sido/sigungu/lat/lon은 참고용 컬럼).</p>
+ *
+ * <p>격자좌표는 <b>시설 실좌표</b>를 기상청 격자변환식(dfs_xy_conv)에 넣어 산출한 값이다.
+ * 이전에는 기상청 공식 매핑표의 읍면동 대표점 격자를 썼는데, 교정시설이 읍면동 중심에서
+ * 멀리 떨어진 경우가 많아(평균 3km, 최대 8km) 59개소 중 36개소가 시설이 실제로 속하지 않는
+ * 격자를 조회하고 있었다 - 대전교도소는 11km 떨어진 격자였다. 시설 단위 알림이 목적이라
+ * 실좌표 기준으로 교체함(2026-08-18).</p>
+ *
+ * <p>시설 실좌표 확정 근거와 지형특성은 private-doc/facility-terrain.csv 참고.</p>
  */
 @Component
 public class FacilityLocationLoader {
