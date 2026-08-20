@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link MolegLawCollectorFactory}가 형사법령 44건만큼 컬렉터를 올바르게 생성하는지 검증.
- * 실제 API 호출은 하지 않음 - 생성/키 유일성만 확인.
+ * {@link MolegLawCollectorFactory}가 형사법령+교정법령 60건만큼 컬렉터를 올바르게 생성하는지
+ * 검증. 실제 API 호출은 하지 않음 - 생성/키 유일성만 확인.
  */
 class MolegLawCollectorFactoryTest {
 
@@ -20,8 +20,8 @@ class MolegLawCollectorFactoryTest {
     private final MolegLawCollectorFactory factory = new MolegLawCollectorFactory(lawSourcePort, lawListLoader);
 
     @Test
-    void 법령_44건만큼_컬렉터가_생성된다() {
-        assertThat(factory.allLawCollectors()).hasSize(44);
+    void 법령_60건만큼_컬렉터가_생성된다() {
+        assertThat(factory.allLawCollectors()).hasSize(60);
     }
 
     @Test
