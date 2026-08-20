@@ -1,6 +1,10 @@
 package egovframework.external.controller;
 
 import egovframework.external.annotation.AdminCallable;
+import egovframework.external.logcollector.BatchHandle;
+import egovframework.external.logcollector.LogCollectorBatchService;
+import egovframework.external.model.CleanseResult;
+import egovframework.external.model.ExecutionType;
 import egovframework.external.response.Response;
 import egovframework.external.service.PublicDataCleanseService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +27,7 @@ import java.util.concurrent.Callable;
 public class PublicDataCleanseController {
 
     private final PublicDataCleanseService cleanseService;
+    private final LogCollectorBatchService logCollectorBatchService;
 
     /**
      * {@code POST /public-data/cleanse/run} - raw_staging의 COLLECTED 건을 즉시 정제.
@@ -43,8 +48,13 @@ public class PublicDataCleanseController {
     @PostMapping("/run")
     public Callable<Response<Object>> runManually() {
         return () -> {
-            int processed = cleanseService.cleanseAllPending();
-            return Response.of(Map.of("processed", processed));
+            BatchHandle handle = logCollectorBatchService.startCleanseBatch(
+                ExecutionType.MANUAL, "manual-api:cleanse");
+
+            CleanseResult result = cleanseService.cleanseAllPending();
+
+            logCollectorBatchService.finishCleanseBatch(handle, result);
+            return Response.of(Map.of("processed", result.totalProcessed()));
         };
     }
 }

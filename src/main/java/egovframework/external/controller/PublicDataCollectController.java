@@ -1,6 +1,9 @@
 package egovframework.external.controller;
 
 import egovframework.external.annotation.AdminCallable;
+import egovframework.external.logcollector.BatchHandle;
+import egovframework.external.logcollector.LogCollectorBatchService;
+import egovframework.external.model.CollectResult;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.publicdata.collector.PublicDataCollectorRegistry;
 import egovframework.external.model.ExecutionType;
@@ -11,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
@@ -33,6 +37,7 @@ public class PublicDataCollectController {
 
     private final PublicDataCollectorRegistry collectorRegistry;
     private final PublicDataCollectionAttemptService collectionAttemptService;
+    private final LogCollectorBatchService logCollectorBatchService;
 
     /**
      * {@code GET /public-data/collect} - 등록된 전체 컬렉터 목록 조회.
@@ -73,7 +78,7 @@ public class PublicDataCollectController {
      * @param key {@code GET /public-data/collect}(위 {@link #list()})로 조회한 컬렉터 식별자.
      *            위치독립 오퍼레이션은 {@code "kma-weather-warning-list"}처럼 오퍼레이션명 그대로,
      *            위치의존 오퍼레이션은 {@code "{오퍼레이션}--{facilityId}"} 형태
-     *            (예: {@code "kma-village-forecast-vilage-fcst--f301"} = 단기예보조회, 대전지방교정청).
+     *            (예: {@code "kma-village-forecast-vilage-fcst--1270280"} = 단기예보조회, 대전지방교정청).
      *            존재하지 않는 key면 {@code NotFoundException}(HTTP 404)
      */
     @AdminCallable
@@ -81,7 +86,12 @@ public class PublicDataCollectController {
     public Callable<Response<Object>> runManually(@PathVariable String key) {
         return () -> {
             PublicDataCollector collector = collectorRegistry.get(key);
-            collectionAttemptService.run(collector, ExecutionType.MANUAL);
+
+            BatchHandle handle = logCollectorBatchService.startCollectBatch(
+                collector.operationKey(), ExecutionType.MANUAL, "manual-api:" + collector.key());
+            CollectResult result = collectionAttemptService.run(collector, ExecutionType.MANUAL);
+            logCollectorBatchService.finishCollectBatch(handle, List.of(result));
+
             return Response.of(Map.of(
                 "key", collector.key(),
                 "sourceName", collector.sourceName(),

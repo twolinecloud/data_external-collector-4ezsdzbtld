@@ -1,5 +1,8 @@
 package egovframework.external.publicdata.scheduler;
 
+import egovframework.external.logcollector.BatchHandle;
+import egovframework.external.logcollector.LogCollectorBatchService;
+import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.publicdata.collector.DisasterMsgCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
@@ -11,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,6 +33,11 @@ import java.util.List;
  * 됨 - 코드 변경 불필요. 새 오퍼레이션(위치독립)을 추가할 때: (1) {@code PublicDataCollector}
  * 구현체 추가 (2) 여기에 {@code @Scheduled} 메서드 하나 추가 (3) application.yml에
  * cron 프로퍼티 추가.</p>
+ *
+ * <p><b>로그 컬렉터 연동(2026-08-20)</b>: {@code @Scheduled} 메서드 1틱 = 로그 컬렉터
+ * 배치(execId) 1개 (private-doc/log-collector-api-spec.md §8). {@link LogCollectorBatchService}가
+ * 꺼져있으면({@code log-collector.enabled=false}, 기본값) 아래 로직은 전부 조용히 no-op이라
+ * 기존 수집 동작에는 영향이 없다.</p>
  */
 @Component
 @RequiredArgsConstructor
@@ -39,29 +48,30 @@ public class PublicDataCollectorScheduler {
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
+    private final LogCollectorBatchService logCollectorBatchService;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-ncst.cron:0 12 * * * *}")
     public void collectKmaUltraSrtNcst() {
-        runAll(locationCollectorFactory.ultraSrtNcstCollectors());
+        runAll("kma-village-forecast-ultra-srt-ncst", locationCollectorFactory.ultraSrtNcstCollectors());
     }
 
     /** 초단기예보: 매시 30분 발표, 45분 이후 제공 -> 매시 47분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-fcst.cron:0 47 * * * *}")
     public void collectKmaUltraSrtFcst() {
-        runAll(locationCollectorFactory.ultraSrtFcstCollectors());
+        runAll("kma-village-forecast-ultra-srt-fcst", locationCollectorFactory.ultraSrtFcstCollectors());
     }
 
     /** 단기예보: 1일 8회(02/05/08/11/14/17/20/23시) 발표, 10분 이후 제공 -> 15분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-vilage-fcst.cron:0 15 2,5,8,11,14,17,20,23 * * *}")
     public void collectKmaVilageFcst() {
-        runAll(locationCollectorFactory.vilageFcstCollectors());
+        runAll("kma-village-forecast-vilage-fcst", locationCollectorFactory.vilageFcstCollectors());
     }
 
     /** 기상특보목록: 발표주기가 정해져있지 않아(이벤트성) 10분 간격 폴링. 전국 조회 1회라 지역 순회 불필요. */
     @Scheduled(cron = "${public-data.collector.kma-weather-warning-list.cron:0 */10 * * * *}")
     public void collectKmaWeatherWarningList() {
-        collectionAttemptService.run(kmaWeatherWarningListCollector, ExecutionType.SCHEDULE);
+        runAll("kma-weather-warning-list", List.of(kmaWeatherWarningListCollector));
     }
 
     /**
@@ -71,7 +81,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
     public void collectMolegCriminalLaws() {
-        runAll(lawCollectorFactory.allLawCollectors());
+        runAll("moleg-criminal-law", lawCollectorFactory.allLawCollectors());
     }
 
     /**
@@ -80,12 +90,19 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.safetydata-disaster-msg-list.cron:0 */10 * * * *}")
     public void collectDisasterMsgList() {
-        collectionAttemptService.run(disasterMsgCollector, ExecutionType.SCHEDULE);
+        runAll("safetydata-disaster-msg-list", List.of(disasterMsgCollector));
     }
 
-    private void runAll(List<PublicDataCollector> collectors) {
+    /** operationKey 1틱 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소 순회도 배치 하나). */
+    private void runAll(String operationKey, List<PublicDataCollector> collectors) {
+        BatchHandle handle = logCollectorBatchService.startCollectBatch(
+            operationKey, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
+
+        List<CollectResult> results = new ArrayList<>(collectors.size());
         for (PublicDataCollector collector : collectors) {
-            collectionAttemptService.run(collector, ExecutionType.SCHEDULE);
+            results.add(collectionAttemptService.run(collector, ExecutionType.SCHEDULE));
         }
+
+        logCollectorBatchService.finishCollectBatch(handle, results);
     }
 }

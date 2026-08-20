@@ -71,6 +71,7 @@ class PublicDataCollectionAttemptServiceTest {
         assertThat(dto.getApiName()).isEqualTo(API_NAME);
         assertThat(dto.getOperationKey()).isEqualTo(OPERATION_KEY);
         assertThat(dto.getFacilityId()).isEqualTo(FACILITY_ID);
+        assertThat(dto.getCollectorKey()).isEqualTo(COLLECTOR_KEY);
 
         ArgumentCaptor<CollectionAttemptLogDto> logCaptor = ArgumentCaptor.forClass(CollectionAttemptLogDto.class);
         verify(collectionAttemptLogStore, times(1)).insert(logCaptor.capture());

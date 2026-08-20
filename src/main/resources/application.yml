@@ -98,3 +98,12 @@ public-data:
   safetydata:
     endpoint: ${SAFETYDATA_ENDPOINT:https://www.safetydata.go.kr/V2/api/DSSP-IF-00247}
     service-key: ${SAFETYDATA_SERVICE_KEY:}
+
+# 로그 컬렉터(Log Collector) 연동 - kcais-admin 플랫폼의 tb_batch_exec_log/tb_batch_step_log/
+# tb_ext_collect_log(T1/T2/T6)에 배치 실행 이력을 남기는 별도 REST API 마이크로서비스.
+# private-doc/log-collector-api-spec.md 참고. 기본값 enabled=false - 아직 PL과 최종
+# "편입 여부"를 확정하지 않았고, 켜면 공유 플랫폼 테이블에 실제 데이터가 남으므로 명시적으로
+# 켜기 전까지는(LOG_COLLECTOR_ENABLED=true) 전 구간이 조용히 no-op 상태를 유지한다.
+log-collector:
+  enabled: ${LOG_COLLECTOR_ENABLED:false}
+  base-url: ${LOG_COLLECTOR_BASE_URL:https://kcais-admin.twolinecloud.com/logc}

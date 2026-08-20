@@ -2,6 +2,9 @@ package egovframework.external.service;
 
 import egovframework.external.dto.RawStagingDto;
 import egovframework.external.exception.CleanseException;
+import egovframework.external.model.CleanseResult;
+import egovframework.external.publicdata.cleanser.CleansedJsonDropWriter;
+import egovframework.external.publicdata.cleanser.JsonStructureDriftDetector;
 import egovframework.external.publicdata.cleanser.PublicDataCleanser;
 import egovframework.external.publicdata.cleanser.PublicDataCleanserRegistry;
 import egovframework.external.staging.RawStagingStore;
@@ -37,21 +40,37 @@ public class PublicDataCleanseService {
     private final RawStagingStore rawStagingStore;
     private final PublicDataCleanserRegistry cleanserRegistry;
     private final MeterRegistry meterRegistry;
+    private final CleansedJsonDropWriter jsonDropWriter;
+    private final JsonStructureDriftDetector structureDriftDetector;
 
-    /** COLLECTED 상태 전체를 다 뺄 때까지 반복 처리. 각 행은 처리 후 상태가 바뀌므로 자연 종료됨. */
-    public int cleanseAllPending() {
+    /**
+     * COLLECTED 상태 전체를 다 뺄 때까지 반복 처리. 각 행은 처리 후 상태가 바뀌므로 자연 종료됨.
+     *
+     * @return 총/성공/실패 건수 - 로그 컬렉터 연동(배치 종료 보고)에 성공/실패 분리가 필요해
+     *         기존 {@code int}(총건수만)에서 확장됨. 기존 호출부는 {@code totalProcessed()}로
+     *         그대로 쓸 수 있다.
+     */
+    public CleanseResult cleanseAllPending() {
         int totalProcessed = 0;
+        int successCount = 0;
+        int failCount = 0;
         List<RawStagingDto> batch;
         while (!(batch = rawStagingStore.findByStatus("COLLECTED", BATCH_SIZE)).isEmpty()) {
             for (RawStagingDto dto : batch) {
-                cleanseOne(dto);
+                boolean success = cleanseOne(dto);
                 totalProcessed++;
+                if (success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                }
             }
         }
-        return totalProcessed;
+        return new CleanseResult(totalProcessed, successCount, failCount);
     }
 
-    private void cleanseOne(RawStagingDto dto) {
+    /** @return 정제 성공 여부 */
+    private boolean cleanseOne(RawStagingDto dto) {
         String operationKey = dto.getOperationKey();
         Timer.Sample sample = Timer.start(meterRegistry);
 
@@ -59,20 +78,26 @@ public class PublicDataCleanseService {
         if (cleanser.isEmpty()) {
             String message = "정제기 없음: operationKey=" + operationKey;
             fail(dto, sample, operationKey, message, null);
-            return;
+            return false;
         }
+
+        structureDriftDetector.check(cleanser.get(), operationKey, dto.getRawPayload());
 
         try {
             String cleansedPayload = cleanser.get().cleanse(dto.getRawPayload());
             long tookMs = stopTimer(sample, operationKey);
             rawStagingStore.markCleansed(dto.getId(), cleansedPayload, null);
+            jsonDropWriter.write(dto.getCollectorKey(), cleansedPayload);
             recordAttempt(operationKey, "SUCCESS");
             PipelineLogUtils.info(logger, STAGE, dto.getSourceName(), dto.getApiName(),
                 "raw_staging id=" + dto.getId() + " 정제 완료 (" + tookMs + "ms)");
+            return true;
         } catch (CleanseException e) {
             fail(dto, sample, operationKey, e.getMessage(), e);
+            return false;
         } catch (Exception e) {
             fail(dto, sample, operationKey, "UNHANDLED EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage(), e);
+            return false;
         }
     }
 

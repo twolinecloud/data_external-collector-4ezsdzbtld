@@ -5,6 +5,7 @@ import egovframework.external.dto.CollectionAttemptLogDto;
 import egovframework.external.dto.RawStagingDto;
 import egovframework.external.exception.CollectException;
 import egovframework.external.model.AttemptStatus;
+import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.staging.CollectionAttemptLogStore;
 import egovframework.external.staging.RawStagingStore;
@@ -46,7 +47,12 @@ public class PublicDataCollectionAttemptService {
     private final CollectionAttemptLogStore collectionAttemptLogStore;
     private final MeterRegistry meterRegistry;
 
-    public void run(PublicDataCollector collector, ExecutionType executionType) {
+    /**
+     * @return 이번 실행 결과 요약 - 로그 컬렉터(외부 배치 로그 시스템) 연동에서 여러 컬렉터의
+     *         결과를 모아 한 번에 보고(bulk)할 때 씀. 기존 호출부(스케줄러/컨트롤러)는 반환값을
+     *         무시해도 그대로 동작한다(부수효과는 이전과 동일).
+     */
+    public CollectResult run(PublicDataCollector collector, ExecutionType executionType) {
         String sourceName = collector.sourceName();
         String apiName = collector.apiName();
         String collectorKey = collector.key();
@@ -59,14 +65,14 @@ public class PublicDataCollectionAttemptService {
             long tookMs = stopTimer(sample, collectorKey);
             PipelineLogUtils.warn(logger, STAGE, sourceName, apiName, e.getMessage() + " (" + tookMs + "ms)");
             logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, e.getMessage(), collectorKey);
-            return;
+            return new CollectResult(collectorKey, sourceName, apiName, AttemptStatus.FAILED, 0, e.getMessage());
         } catch (Exception e) {
             // 수집기 구현체가 CollectException으로 감싸지 않은 미처리 예외 - 그래도 배치를 죽이지 않고 이 소스만 실패 처리
             long tookMs = stopTimer(sample, collectorKey);
             String message = "UNHANDLED EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage();
             PipelineLogUtils.error(logger, STAGE, sourceName, apiName, message + " (" + tookMs + "ms)", e);
             logAttempt(sourceName, apiName, executionType, AttemptStatus.FAILED, 0, message, collectorKey);
-            return;
+            return new CollectResult(collectorKey, sourceName, apiName, AttemptStatus.FAILED, 0, message);
         }
 
         // 항목(카테고리x시간) 하나마다 행을 만들지 않고, 이번 수집 1회 전체를 JSON 배열 하나로
@@ -79,6 +85,7 @@ public class PublicDataCollectionAttemptService {
                 .apiName(apiName)
                 .operationKey(collector.operationKey())
                 .facilityId(collector.facilityId())
+                .collectorKey(collectorKey)
                 .rawPayload(combinedPayload)
                 .build();
             rawStagingStore.insert(dto);
@@ -88,6 +95,7 @@ public class PublicDataCollectionAttemptService {
         PipelineLogUtils.info(logger, STAGE, sourceName, apiName,
             "collected " + rawPayloads.size() + " record(s) in " + tookMs + "ms");
         logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null, collectorKey);
+        return new CollectResult(collectorKey, sourceName, apiName, AttemptStatus.SUCCESS, rawPayloads.size(), null);
     }
 
     private long stopTimer(Timer.Sample sample, String collectorKey) {
