@@ -41,4 +41,30 @@ class KmaWeatherWarningListCleanserTest {
         assertThatThrownBy(() -> cleanser.cleanse(raw))
             .isInstanceOf(CleanseException.class);
     }
+
+    @Test
+    void 구조_프로브가_실측_필드_4개와_일치한다() {
+        String raw = new JSONArray()
+            .put(new JSONObject().put("title", "호우주의보").put("stnId", "108").put("tmFc", 202608121000L).put("tmSeq", 35))
+            .toString();
+        StructureProbe probe = cleanser.structureProbes().get(0);
+
+        java.util.Set<String> observed = probe.observer().apply(new JSONArray(raw));
+        assertThat(observed).containsExactlyInAnyOrder("title", "stnId", "tmFc", "tmSeq");
+        assertThat(probe.knownFields()).containsExactlyInAnyOrderElementsOf(observed);
+    }
+
+    @Test
+    void 새_필드가_섞여오면_구조_프로브가_잡아낸다() {
+        String raw = new JSONArray()
+            .put(new JSONObject().put("title", "호우주의보").put("stnId", "108").put("tmFc", 1L).put("tmSeq", 1)
+                .put("newField", "미확인"))
+            .toString();
+        StructureProbe probe = cleanser.structureProbes().get(0);
+
+        java.util.Set<String> observed = probe.observer().apply(new JSONArray(raw));
+        java.util.Set<String> added = new java.util.HashSet<>(observed);
+        added.removeAll(probe.knownFields());
+        assertThat(added).containsExactly("newField");
+    }
 }

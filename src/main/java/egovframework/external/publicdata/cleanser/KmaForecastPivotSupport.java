@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * "긴 형태"(카테고리x시간별로 한 항목씩 흩어진) 기상청 예보 데이터를, {@code (fcstDate,fcstTime)}
@@ -22,6 +23,14 @@ import java.util.Map;
  * 고정된 스키마로 다루기 쉽도록).</p>
  */
 final class KmaForecastPivotSupport {
+
+    /**
+     * {@code getUltraSrtFcst}/{@code getVilageFcst} raw item(카테고리 하나x시간 하나)의 알려진
+     * 필드 전체 - 구조 드리프트 감지({@link JsonStructureDriftDetector})용 공유 상수. 두
+     * 오퍼레이션이 같은 봉투 필드셋을 쓰므로(카테고리 목록만 다름) 여기 하나로 공유한다.
+     */
+    static final Set<String> RAW_ITEM_FIELDS =
+        Set.of("nx", "ny", "baseDate", "baseTime", "fcstDate", "fcstTime", "category", "fcstValue");
 
     private KmaForecastPivotSupport() {
     }

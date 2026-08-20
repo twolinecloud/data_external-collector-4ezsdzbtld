@@ -51,6 +51,17 @@ class KmaUltraSrtNcstCleanserTest {
             .isInstanceOf(CleanseException.class);
     }
 
+    @Test
+    void 구조_프로브가_실제_필드셋과_일치해서_정상_샘플에선_드리프트가_안_잡힌다() {
+        String raw = new JSONArray().put(ncstItem("T1H", "23.5")).toString();
+        StructureProbe probe = cleanser.structureProbes().get(0);
+
+        assertThat(probe.label()).isEqualTo("raw-item");
+        java.util.Set<String> observed = probe.observer().apply(new JSONArray(raw));
+        assertThat(probe.knownFields()).containsExactlyInAnyOrderElementsOf(observed);
+        assertThat(probe.requiredFields()).containsExactlyInAnyOrderElementsOf(observed);
+    }
+
     private static JSONObject ncstItem(String category, String value) {
         return new JSONObject()
             .put("nx", 60)

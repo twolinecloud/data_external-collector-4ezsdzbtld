@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 초단기실황(getUltraSrtNcst) 정제기. 관측 스냅샷 1개 시점(baseDate/baseTime)뿐이라
@@ -18,9 +19,17 @@ public class KmaUltraSrtNcstCleanser implements PublicDataCleanser {
     /** weather-api.docx 기준 초단기실황 카테고리. */
     private static final List<String> CATEGORIES = List.of("T1H", "RN1", "REH", "PTY", "VEC", "WSD", "UUU", "VVV");
 
+    /** raw item(단일 관측치)의 알려진 필드 전체 - 전부 매 항목에 항상 있어야 함(선택 필드 없음). */
+    private static final Set<String> RAW_ITEM_FIELDS = Set.of("nx", "ny", "baseDate", "baseTime", "category", "obsrValue");
+
     @Override
     public boolean supports(String operationKey) {
         return "kma-village-forecast-ultra-srt-ncst".equals(operationKey);
+    }
+
+    @Override
+    public List<StructureProbe> structureProbes() {
+        return List.of(new StructureProbe("raw-item", RAW_ITEM_FIELDS, RAW_ITEM_FIELDS, StructureProbeSupport::unionKeys));
     }
 
     @Override

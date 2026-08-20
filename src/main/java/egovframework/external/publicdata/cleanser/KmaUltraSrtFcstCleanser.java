@@ -22,6 +22,13 @@ public class KmaUltraSrtFcstCleanser implements PublicDataCleanser {
     }
 
     @Override
+    public List<StructureProbe> structureProbes() {
+        return List.of(new StructureProbe("raw-item",
+            KmaForecastPivotSupport.RAW_ITEM_FIELDS, KmaForecastPivotSupport.RAW_ITEM_FIELDS,
+            StructureProbeSupport::unionKeys));
+    }
+
+    @Override
     public String cleanse(String rawPayload) throws CleanseException {
         try {
             return KmaForecastPivotSupport.pivotByForecastTime(rawPayload, CATEGORIES);

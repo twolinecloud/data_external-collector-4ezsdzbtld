@@ -5,6 +5,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.Set;
+
 /**
  * 기상특보목록(getWthrWrnList) 정제기. 응답 자체가 이미 "특보 발표문 1건 = 1행"인
  * 넓은 형태라서 카테고리 피벗이 필요 없음 - 필수 필드(title) 존재 검증 정도만 수행.
@@ -12,9 +15,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
 
+    /** 실 서비스키 실측(2026-08-12, 24건 전량) 확인된 필드 전체 - 그 밖의 필드는 없었음. */
+    private static final Set<String> RAW_ITEM_FIELDS = Set.of("stnId", "title", "tmFc", "tmSeq");
+
     @Override
     public boolean supports(String operationKey) {
         return "kma-weather-warning-list".equals(operationKey);
+    }
+
+    @Override
+    public List<StructureProbe> structureProbes() {
+        return List.of(new StructureProbe("raw-item", RAW_ITEM_FIELDS, RAW_ITEM_FIELDS, StructureProbeSupport::unionKeys));
     }
 
     @Override
