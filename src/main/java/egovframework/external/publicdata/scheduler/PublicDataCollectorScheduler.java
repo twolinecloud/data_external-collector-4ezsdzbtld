@@ -1,6 +1,7 @@
 package egovframework.external.publicdata.scheduler;
 
 import egovframework.external.model.ExecutionType;
+import egovframework.external.publicdata.collector.DisasterMsgCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
 import egovframework.external.publicdata.collector.KmaWeatherWarningListCollector;
 import egovframework.external.publicdata.collector.MolegLawCollectorFactory;
@@ -37,6 +38,7 @@ public class PublicDataCollectorScheduler {
     private final KmaLocationCollectorFactory locationCollectorFactory;
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
+    private final DisasterMsgCollector disasterMsgCollector;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-ncst.cron:0 12 * * * *}")
@@ -70,6 +72,15 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
     public void collectMolegCriminalLaws() {
         runAll(lawCollectorFactory.allLawCollectors());
+    }
+
+    /**
+     * 긴급재난문자 목록: 발표주기가 정해져있지 않아(이벤트성) 기상특보와 동일하게 10분 간격
+     * 폴링. 전국 조회 1회라 지역 순회 불필요.
+     */
+    @Scheduled(cron = "${public-data.collector.safetydata-disaster-msg-list.cron:0 */10 * * * *}")
+    public void collectDisasterMsgList() {
+        collectionAttemptService.run(disasterMsgCollector, ExecutionType.SCHEDULE);
     }
 
     private void runAll(List<PublicDataCollector> collectors) {

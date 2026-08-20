@@ -61,6 +61,8 @@ public-data:
       cron: "0 */10 * * * *"
     moleg-criminal-law:
       cron: "0 0 5 * * *"
+    safetydata-disaster-msg-list:
+      cron: "0 */10 * * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
@@ -89,3 +91,10 @@ public-data:
     # 형사법령 목록은 classpath:moleg-criminal-laws.csv (모법 22개 + 시행령/시행규칙 22개,
     # 총 44건) - MolegLawListLoader가 읽어서 MolegLawCollectorFactory가 법령별 컬렉터를
     # 생성한다. 목록 추가/변경은 그 CSV만 고치면 됨.
+  # 재난안전데이터공유플랫폼(행정안전부_긴급재난문자, DSSP-IF-00247) - 2026-08-14 신규.
+  # 서비스키 승인 대기 중이라 아직 라이브 미검증 - 응답 필드는 사용자가 제공한 공식 샘플
+  # (private-doc/safetydata.csv)로 확정했지만, 요청 파라미터/응답 envelope은 추정값임
+  # (DisasterMsgCollector 클래스 주석 참고). 승인되면 가장 먼저 재검증할 것.
+  safetydata:
+    endpoint: ${SAFETYDATA_ENDPOINT:https://www.safetydata.go.kr/V2/api/DSSP-IF-00247}
+    service-key: ${SAFETYDATA_SERVICE_KEY:}
