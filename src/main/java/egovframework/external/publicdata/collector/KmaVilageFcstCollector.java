@@ -3,6 +3,7 @@ package egovframework.external.publicdata.collector;
 import egovframework.external.exception.CollectException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,11 @@ public class KmaVilageFcstCollector implements PublicDataCollector {
 
     @Override
     public List<String> collect() throws CollectException {
-        KmaBaseTimeCalculator.BaseTime baseTime = KmaBaseTimeCalculator.vilageFcst(LocalDateTime.now());
+        // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDateTime.now()가
+        // 실제 한국 시각이 아니게 됨 - 기상청 발표시각은 KST 기준이라 명시적으로 지정해야 함(2026-08-21,
+        // 이 버그로 인해 계속 9시간 전 base_time을 요청하고 있었음 - 예: 오늘 08시 발표분 대신 어제 23시 발표분).
+        KmaBaseTimeCalculator.BaseTime baseTime =
+            KmaBaseTimeCalculator.vilageFcst(LocalDateTime.now(ZoneId.of("Asia/Seoul")));
 
         Map<String, String> params = new LinkedHashMap<>();
         params.put("numOfRows", "1000");

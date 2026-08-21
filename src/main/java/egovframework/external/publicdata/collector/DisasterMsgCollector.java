@@ -10,6 +10,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -86,7 +87,9 @@ public class DisasterMsgCollector implements PublicDataCollector {
             throw new CollectException(sourceName(), apiName(), "엔드포인트/서비스키 설정이 비어있음 (미확정)");
         }
 
-        String today = LocalDate.now().format(DATE_FMT);
+        // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDate.now()가
+        // 실제 한국 날짜가 아니게 됨 - 자정~오전 9시 사이엔 하루 전 날짜로 조회될 수 있어 명시 필요.
+        String today = LocalDate.now(ZoneId.of("Asia/Seoul")).format(DATE_FMT);
         List<String> allItems = new ArrayList<>();
         int totalCount = Integer.MAX_VALUE; // 첫 페이지 파싱 전엔 모름
         int pageNo = 1;

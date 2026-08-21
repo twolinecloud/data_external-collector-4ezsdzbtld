@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,7 +57,9 @@ public class KmaWeatherWarningListCollector implements PublicDataCollector {
 
     @Override
     public List<String> collect() throws CollectException {
-        String today = LocalDate.now().format(DATE_FMT);
+        // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDate.now()가
+        // 실제 한국 날짜가 아니게 됨 - 자정~오전 9시 사이엔 하루 전 날짜로 조회될 수 있어 명시 필요.
+        String today = LocalDate.now(ZoneId.of("Asia/Seoul")).format(DATE_FMT);
 
         Map<String, String> params = new LinkedHashMap<>();
         params.put("numOfRows", "100");
