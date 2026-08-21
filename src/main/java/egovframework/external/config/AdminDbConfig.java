@@ -1,11 +1,12 @@
 package egovframework.external.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.annotation.MapperScan;
 import org.mybatis.spring.SqlSessionFactoryBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,9 +17,14 @@ import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
 
 /**
- * admin-db(kcais, PostgreSQL) 연결 설정. {@code public-data.load.enabled=true}일 때만
- * 빈이 만들어진다 - 꺼져있으면(기본값) DataSource/MyBatis 관련 빈이 전혀 생성되지 않아
- * DB 연결정보 없이도 앱이 정상 기동한다(로그 컬렉터와 동일한 원칙).
+ * admin-db(kcais, PostgreSQL) 연결 설정. 다음 둘 중 하나라도 켜져있을 때만 빈이 만들어진다
+ * (2026-08-21, OR 조건으로 확장) - 꺼져있으면 DataSource/MyBatis 관련 빈이 전혀 생성되지 않아
+ * DB 연결정보 없이도 앱이 정상 기동한다(로그 컬렉터와 동일한 원칙):
+ * <ul>
+ *   <li>{@code public-data.load.enabled=true} - 수집/정제 결과를 admin-db 최종 테이블에 적재</li>
+ *   <li>{@code public-data.moleg.law-target-source=db} - 법령 수집 대상 목록을 admin-db에서 읽음
+ *       (Load와는 별개 관심사 - 목록 "읽기"만 하고 "쓰기"는 없음, {@code MolegLawTargetSource} 참고)</li>
+ * </ul>
  *
  * <p>{@link egovframework.external.Main}에서 {@code DataSourceAutoConfiguration}/
  * {@code MybatisAutoConfiguration}을 통째로 제외해뒀으므로, 여기서 수동으로 등록하는
@@ -29,8 +35,14 @@ import javax.sql.DataSource;
  * 우회해야 한다 - private-doc/cleanse-db-schema-spec.md §6 참고.</p>
  */
 @Configuration
-@ConditionalOnProperty(prefix = "public-data.load", name = "enabled", havingValue = "true")
-@MapperScan("egovframework.external.publicdata.loader.mapper")
+@ConditionalOnExpression(
+    "${public-data.load.enabled:false} or '${public-data.moleg.law-target-source:csv}' == 'db'")
+// annotationClass 지정 필수 - 안 걸면 MyBatis MapperScan이 스캔 범위 내 "모든 인터페이스"를
+// 매퍼로 오인해서 프록시 빈을 만들어버림(실측, 2026-08-21). MolegLawTargetSource 같은 순수
+// 도메인 전략 인터페이스가 "molegLawTargetSource"라는 이름의 가짜 매퍼 빈으로 등록되면서
+// 진짜 구현체(CsvMolegLawTargetSource)와 타입이 충돌해 부팅이 실패했었음(2개 빈 발견 에러) -
+// @Mapper 붙은 것만 스캔하도록 제한해서 해결.
+@MapperScan(basePackages = "egovframework.external.publicdata", annotationClass = Mapper.class)
 public class AdminDbConfig {
 
     // DataSourceBuilder로 HikariDataSource에 spring.datasource.*를 바로 바인딩하면
