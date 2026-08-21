@@ -5,6 +5,26 @@ spring:
     desc: external-collector-4ezsdzbtld RESTful API Service
   jackson:
     date-format: "yyyy-MM-dd'T'HH:mm:ss"
+  # admin-db(kcais, PostgreSQL) - public-data.load.enabled=true일 때만 AdminDbConfig가 이 값으로
+  # 실제 DataSource를 만든다(꺼져있으면 이 블록 자체가 안 읽힘, DataSourceAutoConfiguration도
+  # Main.java에서 제외돼있어 값이 비어있어도 앱 기동에 영향 없음). 로컬 개발 시엔
+  # `kubectl port-forward svc/admin-db-fy9tjq4tsk -n service-core 15432:5432`로 접속 -
+  # private-doc/cleanse-db-schema-spec.md §6 참고.
+  datasource:
+    url: jdbc:postgresql://${ADMIN_DB_HOST:127.0.0.1}:${ADMIN_DB_PORT:15432}/${ADMIN_DB_NAME:correction_ai}?currentSchema=kcais
+    username: ${ADMIN_DB_USER:}
+    password: ${ADMIN_DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    # Hikari 기본값(풀 크기 10, 기동시 즉시 전부 예열)은 우리 워크로드엔 과함 - raw_staging을
+    # 한 줄씩 순차 처리하는 구조라 동시 커넥션이 여러 개 필요 없음. 2026-08-21: 이 기본값 때문에
+    # 로컬 개발 중 반복 재기동으로 admin-db 커넥션 슬롯을 다 소진해 다른 서비스 접속까지 막은 적
+    # 있음 - 풀을 작게 잡고, 오래 열려있는데 안 쓰는 연결은 최대수명을 짧게 둬서 자동 회수되게 함.
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      idle-timeout: 30000        # 30초 이상 노는 연결은 자동 반납(풀 크기가 minimum-idle까지 줄어듦)
+      max-lifetime: 600000       # 10분 넘은 연결은 강제 재생성 - 방치돼도 오래 안 남음
+      leak-detection-threshold: 30000  # 30초 넘게 반납 안 된 커넥션은 경고 로그(실제 코드 누수 감지용)
 
 server:
   port: 8080
@@ -71,6 +91,13 @@ public-data:
       # 기본 꺼짐 - admin-db 적재 전까지 정제 결과를 눈으로 확인할 방법이 없어서 추가함, 운영에는 영향 없음.
       enabled: ${PUBLIC_DATA_CLEANSE_JSON_DROP_ENABLED:false}
       dir: ${PUBLIC_DATA_CLEANSE_JSON_DROP_DIR:private-doc/cleansed-json-drop}
+  load:
+    # admin-db(kcais) 적재 - 2026-08-21 신규. 기본 꺼짐(로그 컬렉터와 동일 원칙) - 켜면
+    # AdminDbConfig가 DataSource/MyBatis 빈을 실제로 만들고, 스케줄러/수동 트리거가 CLEANSED
+    # 상태 raw_staging 행을 admin-db 최종 테이블에 upsert하기 시작한다. 켜기 전에
+    # FacilityMasterSeeder로 tb_ext_weather_facility(마스터)부터 채워야 FK가 성립한다.
+    enabled: ${PUBLIC_DATA_LOAD_ENABLED:false}
+    cron: "0 */5 * * * *"
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

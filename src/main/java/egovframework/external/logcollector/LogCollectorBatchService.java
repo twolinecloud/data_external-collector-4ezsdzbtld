@@ -4,6 +4,7 @@ import egovframework.external.model.AttemptStatus;
 import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
+import egovframework.external.model.LoadResult;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,6 +45,8 @@ public class LogCollectorBatchService {
     private static final String DATA_TYPE_CD = "EXTERNAL";
     private static final String STEP_COLLECT = "COLLECT";
     private static final String STEP_CLEANSE = "CLEANSE";
+    // C05 공통코드 stepTypeCd(COLLECT/CLEANSE/ANALYZE/DEIDENT/STORE/SEND) 중 적재는 STORE에 대응.
+    private static final String STEP_STORE = "STORE";
 
     /** operationKey -> jobNm에 쓸 한글 라벨 (private-doc/log-collector-api-spec.md §8). */
     private static final Map<String, String> OPERATION_LABEL = Map.of(
@@ -75,6 +78,11 @@ public class LogCollectorBatchService {
         return start("외부연계 정제", executionType, triggerBy, STEP_CLEANSE);
     }
 
+    /** Load(admin-db 적재) 배치 시작 (스케줄 1틱 = 배치 1개, Collect/Cleanse와 연결 안 함 - 동일 원칙). */
+    public BatchHandle startLoadBatch(ExecutionType executionType, String triggerBy) {
+        return start("외부연계 적재", executionType, triggerBy, STEP_STORE);
+    }
+
     /** Collect 배치 종료 - T6(컬렉터별 실적) bulk 적재 후 단계/배치 종료. */
     public void finishCollectBatch(BatchHandle handle, List<CollectResult> results) {
         if (!handle.active()) {
@@ -89,6 +97,14 @@ public class LogCollectorBatchService {
 
     /** Cleanse 배치 종료. */
     public void finishCleanseBatch(BatchHandle handle, CleanseResult result) {
+        if (!handle.active()) {
+            return;
+        }
+        finish(handle, result.totalProcessed(), result.successCount(), result.failCount());
+    }
+
+    /** Load 배치 종료. */
+    public void finishLoadBatch(BatchHandle handle, LoadResult result) {
         if (!handle.active()) {
             return;
         }

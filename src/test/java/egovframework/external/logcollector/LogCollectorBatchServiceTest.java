@@ -4,6 +4,7 @@ import egovframework.external.model.AttemptStatus;
 import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
+import egovframework.external.model.LoadResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
@@ -219,5 +220,47 @@ class LogCollectorBatchServiceTest {
         ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
         verify(client).createStep(eq("exec1"), stepCaptor.capture());
         assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("CLEANSE");
+    }
+
+    @Test
+    void load_배치_시작시_jobNm과_stepTypeCd가_STORE로_고정된다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
+        when(client.createStep(anyString(), any())).thenReturn(Optional.of("step1"));
+
+        service().startLoadBatch(ExecutionType.SCHEDULE, "scheduler:load");
+
+        ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createBatch(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 적재");
+        assertThat(batchCaptor.getValue().getString("triggerBy")).isEqualTo("scheduler:load");
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createStep(eq("exec1"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("STORE");
+    }
+
+    @Test
+    void load_종료시_LoadResult_건수를_그대로_배치에_반영한다() {
+        BatchHandle handle = new BatchHandle("exec3", "step3", java.time.LocalDateTime.now().minusSeconds(1), true);
+
+        service().finishLoadBatch(handle, new LoadResult(96, 96, 0));
+
+        ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishBatch(eq("exec3"), batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getInt("targetCnt")).isEqualTo(96);
+        assertThat(batchCaptor.getValue().getInt("successCnt")).isEqualTo(96);
+        assertThat(batchCaptor.getValue().getInt("failCnt")).isEqualTo(0);
+        assertThat(batchCaptor.getValue().getString("execStsCd")).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void 비활성_핸들로_load_종료를_호출하면_아무_호출도_안한다() {
+        BatchHandle inactive = BatchHandle.inactive();
+
+        service().finishLoadBatch(inactive, new LoadResult(0, 0, 0));
+
+        verify(client, never()).finishStep(any(), any());
+        verify(client, never()).finishBatch(any(), any());
     }
 }

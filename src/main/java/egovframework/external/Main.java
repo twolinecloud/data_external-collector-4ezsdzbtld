@@ -3,7 +3,10 @@ package egovframework.external;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -17,7 +20,15 @@ import java.util.TimeZone;
 import static org.springframework.web.servlet.function.RequestPredicates.GET;
 import static org.springframework.web.servlet.function.RouterFunctions.route;
 
-@SpringBootApplication
+// DataSource/MyBatis 자동설정을 통째로 제외 - AdminDbConfig가 public-data.load.enabled=true일
+// 때만 수동으로 DataSource/SqlSessionFactory 빈을 만든다. 자동설정에 맡기면 postgresql
+// 드라이버가 classpath에 있다는 이유만으로 datasource 설정을 시도해서, DB 연결 정보가 없는
+// 개발자(Load 기능 안 쓰는 경우)의 로컬 기동이 깨질 수 있음 - 2026-08-21.
+@SpringBootApplication(exclude = {
+    DataSourceAutoConfiguration.class,
+    DataSourceTransactionManagerAutoConfiguration.class,
+    MybatisAutoConfiguration.class
+})
 public class Main {
 
     @Value("${service-path}")
