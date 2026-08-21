@@ -1,4 +1,4 @@
-package egovframework.external.rule;
+package egovframework.external.publicdata.collector;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -14,8 +14,7 @@ import java.util.List;
 /**
  * {@code classpath:kma-facility-locations.csv}에서 시설의 시도명만 뽑아 제공 - 기상특보
  * 관할구역({@link KmaWarningStation}) 매칭 전용. 좌표/격자를 다루는
- * {@link egovframework.external.publicdata.collector.FacilityLocationLoader}나 재난문자
- * 지역매칭용 {@link egovframework.external.publicdata.collector.FacilityRegionLoader}
+ * {@link FacilityLocationLoader}나 재난문자 지역매칭용 {@link FacilityRegionLoader}
  * (시도+시군구 통짜 키)와는 용도가 달라 분리했다 - 여기선 시도 단위 비교만 필요하다.
  */
 @Component

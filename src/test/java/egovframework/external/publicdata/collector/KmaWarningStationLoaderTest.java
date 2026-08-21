@@ -1,4 +1,4 @@
-package egovframework.external.rule;
+package egovframework.external.publicdata.collector;
 
 import org.junit.jupiter.api.Test;
 

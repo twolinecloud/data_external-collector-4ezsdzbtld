@@ -2,6 +2,8 @@ package egovframework.external.rule;
 
 import egovframework.external.dto.RawStagingDto;
 import egovframework.external.publicdata.cleanser.CleansedJsonDropWriter;
+import egovframework.external.publicdata.collector.FacilitySidoLoader;
+import egovframework.external.publicdata.collector.KmaWarningStationLoader;
 import egovframework.external.staging.InMemoryRawStagingStore;
 import egovframework.external.staging.RawStagingStore;
 import org.junit.jupiter.api.Test;

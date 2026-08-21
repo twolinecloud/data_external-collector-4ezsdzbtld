@@ -2,6 +2,10 @@ package egovframework.external.rule;
 
 import egovframework.external.dto.RawStagingDto;
 import egovframework.external.publicdata.cleanser.CleansedJsonDropWriter;
+import egovframework.external.publicdata.collector.FacilitySido;
+import egovframework.external.publicdata.collector.FacilitySidoLoader;
+import egovframework.external.publicdata.collector.KmaWarningStation;
+import egovframework.external.publicdata.collector.KmaWarningStationLoader;
 import egovframework.external.staging.RawStagingStore;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
