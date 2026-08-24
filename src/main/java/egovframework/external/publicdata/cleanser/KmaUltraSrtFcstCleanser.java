@@ -31,7 +31,7 @@ public class KmaUltraSrtFcstCleanser implements PublicDataCleanser {
     @Override
     public String cleanse(String rawPayload) throws CleanseException {
         try {
-            return KmaForecastPivotSupport.pivotByForecastTime(rawPayload, CATEGORIES);
+            return KmaForecastPivotSupport.pivotByForecastTime(rawPayload, CATEGORIES, "t1h", "reh", "wsd");
         } catch (Exception e) {
             throw new CleanseException("공공데이터포털 (기상청 동네예보)", "초단기예보조회", "정제 실패: " + e.getMessage(), e);
         }

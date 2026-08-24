@@ -57,6 +57,8 @@ public class KmaVilageFcstLoader implements PublicDataLoader {
                 for (String field : FIELDS) {
                     p.put(field, row.isNull(field) ? null : row.getString(field));
                 }
+                // 체감온도(계산값) - ApparentTemperatureCalculator 참고, 산출 불가 조건이면 null.
+                p.put("sensTemp", row.isNull("senstemp") ? null : row.getBigDecimal("senstemp"));
                 p.put("operationKey", dto.getOperationKey());
                 p.put("collectDtm", dto.getCollectedAt());
                 p.put("cleanseDtm", dto.getCleansedAt());

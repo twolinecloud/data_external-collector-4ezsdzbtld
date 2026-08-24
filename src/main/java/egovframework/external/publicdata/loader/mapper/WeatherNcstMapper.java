@@ -13,15 +13,15 @@ public interface WeatherNcstMapper {
 
     @Insert("""
         INSERT INTO kcais.tb_ext_weather_ncst
-            (weather_ncst_id, facility_id, nx, ny, base_dtm, t1h, rn1, reh, pty, vec, wsd, uuu, vvv,
+            (weather_ncst_id, facility_id, nx, ny, base_dtm, t1h, rn1, reh, pty, vec, wsd, uuu, vvv, sens_temp,
              operation_key, collect_dtm, cleanse_dtm)
         VALUES
-            (#{id}, #{facilityId}, #{nx}, #{ny}, #{baseDtm}, #{t1h}, #{rn1}, #{reh}, #{pty}, #{vec}, #{wsd}, #{uuu}, #{vvv},
+            (#{id}, #{facilityId}, #{nx}, #{ny}, #{baseDtm}, #{t1h}, #{rn1}, #{reh}, #{pty}, #{vec}, #{wsd}, #{uuu}, #{vvv}, #{sensTemp},
              #{operationKey}, #{collectDtm}, #{cleanseDtm})
         ON CONFLICT (facility_id, base_dtm) DO UPDATE SET
             nx = EXCLUDED.nx, ny = EXCLUDED.ny,
             t1h = EXCLUDED.t1h, rn1 = EXCLUDED.rn1, reh = EXCLUDED.reh, pty = EXCLUDED.pty,
-            vec = EXCLUDED.vec, wsd = EXCLUDED.wsd, uuu = EXCLUDED.uuu, vvv = EXCLUDED.vvv,
+            vec = EXCLUDED.vec, wsd = EXCLUDED.wsd, uuu = EXCLUDED.uuu, vvv = EXCLUDED.vvv, sens_temp = EXCLUDED.sens_temp,
             collect_dtm = EXCLUDED.collect_dtm, cleanse_dtm = EXCLUDED.cleanse_dtm
         """)
     void upsert(Map<String, Object> p);

@@ -55,4 +55,22 @@ class KmaVilageFcstLoaderTest {
         assertThat(p.get("baseDtm")).isEqualTo(LocalDateTime.of(2026, 8, 21, 8, 0));
         assertThat(p.get("fcstDtm")).isEqualTo(LocalDateTime.of(2026, 8, 21, 12, 0));
     }
+
+    @Test
+    void senstemp가_있으면_BigDecimal로_변환해서_적재한다() throws LoadException {
+        RawStagingDto dto = RawStagingDto.builder()
+            .facilityId("1270280")
+            .operationKey("kma-village-forecast-vilage-fcst")
+            .cleansedPayload("[{\"nx\":67,\"ny\":100,\"baseDate\":\"20260821\",\"baseTime\":\"0800\","
+                + "\"fcstDate\":\"20260821\",\"fcstTime\":\"1200\",\"tmp\":\"27\",\"senstemp\":26.5}]")
+            .build();
+
+        loader().load(dto);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mapper, times(1)).upsert(captor.capture());
+        Map<String, Object> p = captor.getValue();
+
+        assertThat((java.math.BigDecimal) p.get("sensTemp")).isEqualByComparingTo("26.5");
+    }
 }

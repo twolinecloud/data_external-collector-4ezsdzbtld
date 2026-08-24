@@ -14,17 +14,17 @@ public interface WeatherUltraFcstMapper {
     @Insert("""
         INSERT INTO kcais.tb_ext_weather_ultra_fcst
             (weather_ultra_fcst_id, facility_id, nx, ny, base_dtm, fcst_dtm,
-             t1h, rn1, sky, uuu, vvv, reh, pty, pop, lgt, vec, wsd,
+             t1h, rn1, sky, uuu, vvv, reh, pty, pop, lgt, vec, wsd, sens_temp,
              operation_key, collect_dtm, cleanse_dtm)
         VALUES
             (#{id}, #{facilityId}, #{nx}, #{ny}, #{baseDtm}, #{fcstDtm},
-             #{t1h}, #{rn1}, #{sky}, #{uuu}, #{vvv}, #{reh}, #{pty}, #{pop}, #{lgt}, #{vec}, #{wsd},
+             #{t1h}, #{rn1}, #{sky}, #{uuu}, #{vvv}, #{reh}, #{pty}, #{pop}, #{lgt}, #{vec}, #{wsd}, #{sensTemp},
              #{operationKey}, #{collectDtm}, #{cleanseDtm})
         ON CONFLICT (facility_id, base_dtm, fcst_dtm) DO UPDATE SET
             nx = EXCLUDED.nx, ny = EXCLUDED.ny,
             t1h = EXCLUDED.t1h, rn1 = EXCLUDED.rn1, sky = EXCLUDED.sky, uuu = EXCLUDED.uuu,
             vvv = EXCLUDED.vvv, reh = EXCLUDED.reh, pty = EXCLUDED.pty, pop = EXCLUDED.pop,
-            lgt = EXCLUDED.lgt, vec = EXCLUDED.vec, wsd = EXCLUDED.wsd,
+            lgt = EXCLUDED.lgt, vec = EXCLUDED.vec, wsd = EXCLUDED.wsd, sens_temp = EXCLUDED.sens_temp,
             collect_dtm = EXCLUDED.collect_dtm, cleanse_dtm = EXCLUDED.cleanse_dtm
         """)
     void upsert(Map<String, Object> p);

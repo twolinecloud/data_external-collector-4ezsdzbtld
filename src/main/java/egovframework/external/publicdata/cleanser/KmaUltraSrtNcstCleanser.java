@@ -54,6 +54,9 @@ public class KmaUltraSrtNcstCleanser implements PublicDataCleanser {
                 JSONObject item = rawItems.getJSONObject(i);
                 row.put(item.getString("category").toLowerCase(), item.get("obsrValue"));
             }
+            // 체감온도(senstemp) - 별도 API 없이 기온(t1h)/습도(reh)/풍속(wsd)로 계산해서 추가.
+            // ApparentTemperatureCalculator 클래스 주석 참고.
+            ApparentTemperatureCalculator.enrich(row, row.getString("baseDate"), "t1h", "reh", "wsd");
 
             return new JSONArray().put(row).toString();
         } catch (Exception e) {

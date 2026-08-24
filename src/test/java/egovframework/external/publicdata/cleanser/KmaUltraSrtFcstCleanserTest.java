@@ -36,6 +36,19 @@ class KmaUltraSrtFcstCleanserTest {
     }
 
     @Test
+    void 기온과_습도가_있으면_체감온도_senstemp를_계산해서_채운다() throws CleanseException {
+        String raw = new JSONArray()
+            .put(fcstItem("20260805", "0600", "T1H", "30"))
+            .put(fcstItem("20260805", "0600", "REH", "70"))
+            .toString();
+
+        String result = cleanser.cleanse(raw);
+
+        JSONObject row = new JSONArray(result).getJSONObject(0);
+        assertThat(row.isNull("senstemp")).isFalse();
+    }
+
+    @Test
     void 정제_실패시_CleanseException으로_감싼다() {
         assertThatThrownBy(() -> cleanser.cleanse("not a json array"))
             .isInstanceOf(CleanseException.class);

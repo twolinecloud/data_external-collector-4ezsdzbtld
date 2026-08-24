@@ -35,7 +35,13 @@ final class KmaForecastPivotSupport {
     private KmaForecastPivotSupport() {
     }
 
-    static String pivotByForecastTime(String rawPayload, List<String> knownCategories) {
+    /**
+     * @param tempField/humidityField/windField 체감온도(senstemp) 계산에 쓸 카테고리명(소문자,
+     *        knownCategories에 포함된 값이어야 함) - 오퍼레이션마다 기온 필드명이 다름
+     *        (단기예보는 tmp, 초단기예보는 t1h). {@code ApparentTemperatureCalculator} 참고.
+     */
+    static String pivotByForecastTime(String rawPayload, List<String> knownCategories,
+                                       String tempField, String humidityField, String windField) {
         JSONArray rawItems = new JSONArray(rawPayload);
 
         Map<String, JSONObject> rowsByTime = new LinkedHashMap<>();
@@ -51,7 +57,10 @@ final class KmaForecastPivotSupport {
         }
 
         JSONArray result = new JSONArray();
-        rowsByTime.values().forEach(result::put);
+        rowsByTime.values().forEach(row -> {
+            ApparentTemperatureCalculator.enrich(row, row.getString("fcstDate"), tempField, humidityField, windField);
+            result.put(row);
+        });
         return result.toString();
     }
 
