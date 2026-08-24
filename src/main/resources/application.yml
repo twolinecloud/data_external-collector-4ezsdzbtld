@@ -121,6 +121,13 @@ public-data:
     # 수동 트리거는 POST /public-data/facility-sync/run, 조회는 GET .../queue.
     enabled: ${PUBLIC_DATA_FACILITY_SYNC_ENABLED:false}
     cron: "0 0 4 * * *"
+  vworld:
+    # 국토교통부 공간정보오픈플랫폼 - 신규 시설 주소 자동 지오코딩(Phase B, 2026-08-24)에
+    # 사용. tb_dim_instt.dtladr 주소 상당수가 번지수 마스킹(000/0000)돼있어 실패율이 높을
+    # 것을 전제로 함(FacilitySyncService/VWorldGeocoder 클래스 주석 참고) - 실패해도
+    # 파이프라인은 안 죽고 검토 큐에 상태만 남는다.
+    endpoint: ${VWORLD_ENDPOINT:http://api.vworld.kr/req/address}
+    api-key: ${VWORLD_API_KEY:}
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

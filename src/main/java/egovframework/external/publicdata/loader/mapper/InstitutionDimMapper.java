@@ -28,15 +28,15 @@ public interface InstitutionDimMapper {
 
     @Select("""
         WITH RECURSIVE corr_facility AS (
-            SELECT corr_instt_cd, corr_instt_nm, upper_corr_instt_cd, use_yn
+            SELECT corr_instt_cd, corr_instt_nm, upper_corr_instt_cd, use_yn, dtladr
             FROM kcais.tb_dim_instt
             WHERE corr_instt_cd = '1270045'
             UNION ALL
-            SELECT t.corr_instt_cd, t.corr_instt_nm, t.upper_corr_instt_cd, t.use_yn
+            SELECT t.corr_instt_cd, t.corr_instt_nm, t.upper_corr_instt_cd, t.use_yn, t.dtladr
             FROM kcais.tb_dim_instt t
             JOIN corr_facility cf ON t.upper_corr_instt_cd = cf.corr_instt_cd
         )
-        SELECT corr_instt_cd AS "corrInsttCd", corr_instt_nm AS "corrInsttNm"
+        SELECT corr_instt_cd AS "corrInsttCd", corr_instt_nm AS "corrInsttNm", dtladr AS "dtladr"
         FROM corr_facility
         WHERE corr_instt_cd <> '1270045'
           AND (use_yn IS NULL OR use_yn <> 'N')
