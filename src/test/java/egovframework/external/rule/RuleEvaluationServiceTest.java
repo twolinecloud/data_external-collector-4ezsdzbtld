@@ -46,12 +46,12 @@ class RuleEvaluationServiceTest {
     }
 
     @Test
-    void 정제된_데이터가_없으면_59개소x2재해_118건이_전부_NONE으로_평가된다() {
+    void 정제된_데이터가_없으면_59개소x3재해_177건이_전부_NONE으로_평가된다() {
         setUp();
 
         List<AlertResult> results = service.evaluateAll();
 
-        assertThat(results).hasSize(118);
+        assertThat(results).hasSize(177);
         assertThat(results).allSatisfy(r -> assertThat(r.level()).isEqualTo(AlertLevel.NONE));
     }
 
@@ -150,13 +150,45 @@ class RuleEvaluationServiceTest {
     }
 
     @Test
+    void 재난문자_풍랑신호는_HIGH_WAVE만_상향시킨다() {
+        setUp();
+        String disasterMsg = "[{\"sn\":1,\"facilityId\":\"" + YEONGWOL + "\",\"dstSeNm\":\"풍랑\"}]";
+        insertCleansed("safetydata-disaster-msg-list", null, "safetydata-disaster-msg-list", disasterMsg);
+
+        List<AlertResult> results = service.evaluateAll();
+
+        AlertResult highWave = findResult(results, YEONGWOL, HazardType.HIGH_WAVE);
+        assertThat(highWave.regionTriggered()).isTrue();
+        assertThat(highWave.weatherTrigger()).isEqualTo(WeatherTrigger.NONE); // 자체 계산 트리거 없음
+        assertThat(highWave.level()).isEqualTo(AlertLevel.INFO); // MEDIUM x NONE(없음) -> 한단계 상향
+
+        assertThat(findResult(results, YEONGWOL, HazardType.LANDSLIDE).regionTriggered()).isFalse();
+        assertThat(findResult(results, YEONGWOL, HazardType.FLOOD).regionTriggered()).isFalse();
+    }
+
+    @Test
+    void 기상특보_풍랑주의보와_폭풍해일주의보_둘_다_HIGH_WAVE로_매핑된다() {
+        setUp();
+        String warning = "["
+            + "{\"stnId\":\"105\",\"title\":\"[특보] 제08-1호 : 2026.08.18.09:00 / 풍랑주의보 발표 (*)\",\"tmFc\":202608180900,\"tmSeq\":1},"
+            + "{\"stnId\":\"105\",\"title\":\"[특보] 제08-2호 : 2026.08.18.09:00 / 폭풍해일주의보 발표 (*)\",\"tmFc\":202608180900,\"tmSeq\":2}]";
+        insertCleansed("kma-weather-warning-list", null, "kma-weather-warning-list", warning);
+
+        List<AlertResult> results = service.evaluateAll();
+
+        AlertResult highWave = findResult(results, YEONGWOL, HazardType.HIGH_WAVE);
+        assertThat(highWave.regionTriggered()).isTrue();
+        assertThat(highWave.regionSources()).containsExactly("weatherWarning");
+    }
+
+    @Test
     void 정제기_없는_operationKey는_조용히_무시된다() {
         setUp();
         insertCleansed("kma-weather-warning-list", null, "kma-weather-warning-list", "[]");
 
         List<AlertResult> results = service.evaluateAll();
 
-        assertThat(results).hasSize(118);
+        assertThat(results).hasSize(177);
         assertThat(results).allSatisfy(r -> assertThat(r.level()).isEqualTo(AlertLevel.NONE));
     }
 

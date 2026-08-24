@@ -12,6 +12,7 @@ import egovframework.external.utility.Ulid;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -26,13 +27,19 @@ import java.util.Map;
  * 시도한다(Phase B) - 성공하면 좌표/격자까지 채운 채로, 실패하면 상태만 남긴 채로 큐에 쌓여
  * 사람이 {@link #approve}로 확정하거나 {@link #reject}로 무시한다.
  *
- * <p><b>아직 시설을 자동으로 CSV에 반영하지 않는다</b> - {@link #approve}가 admin-db
- * {@code tb_ext_weather_facility}엔 즉시 쓰지만, 실제 날씨 수집기(
- * {@code KmaLocationCollectorFactory})는 여전히 {@code kma-facility-locations.csv}를 읽으므로
- * 수집이 실제로 시작되려면 CSV도 사람이 반영해야 한다(Phase C에서 해소 예정 - 컬렉터의 소스를
- * DB로 옮기는 게 그 단계의 핵심).</p>
+ * <p>{@link #approve}는 admin-db {@code tb_ext_weather_facility}에 즉시 쓴다 -
+ * {@code public-data.facility.master-source=db}면(Phase C, 2026-08-24 완료) 이걸로 충분히
+ * 실제 수집이 다음 스케줄 틱부터 시작된다. {@code csv}(기본값)면 여전히
+ * {@code kma-facility-locations.csv}도 사람이 반영해야 한다.</p>
+ *
+ * <p><b>{@code public-data.facility-sync.enabled=true}일 때만 빈으로 등록됨(2026-08-24 수정)</b> -
+ * 생성자에서 admin-db 매퍼 3개를 직접 요구하는데, admin-db 관련 플래그가 전부 기본값(꺼짐)이면
+ * 그 매퍼들이 존재하지 않아 부팅이 실패하는 잠재 버그가 있었음(실측 - {@code PublicDataPurgeService}
+ * 클래스 주석에 상세 경위 기록) - 조건부 빈으로 바꿔 해결. {@code FacilitySyncScheduler}/
+ * {@code FacilitySyncController}도 동일 조건 필요(같이 수정).</p>
  */
 @Service
+@ConditionalOnProperty(prefix = "public-data.facility-sync", name = "enabled", havingValue = "true")
 public class FacilitySyncService {
 
     private static final Logger logger = LogManager.getLogger(FacilitySyncService.class);

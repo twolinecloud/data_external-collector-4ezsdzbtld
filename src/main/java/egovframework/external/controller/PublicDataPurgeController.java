@@ -6,6 +6,7 @@ import egovframework.external.response.Response;
 import egovframework.external.service.PublicDataPurgeService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,11 +17,15 @@ import java.util.concurrent.Callable;
 /**
  * admin-db 보존기간 초과 데이터 수동 폐기(purge) 트리거 API. 스케줄(매일 새벽 3시)과
  * 무관하게 지금 바로 정리하고 싶을 때 사용 - {@link PublicDataPurgeService}를 스케줄러와 공유한다.
+ *
+ * <p>{@code public-data.purge.enabled=true}일 때만 빈으로 등록됨(2026-08-24 수정) -
+ * {@link PublicDataPurgeService} 클래스 주석 참고(꺼져있으면 이 API 자체가 404).</p>
  */
 @Tag(name = "PublicData-Purge", description = "admin-db 보존기간 초과 데이터 수동 폐기(purge) API")
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/public-data/purge")
+@ConditionalOnProperty(prefix = "public-data.purge", name = "enabled", havingValue = "true")
 public class PublicDataPurgeController {
 
     private final PublicDataPurgeService purgeService;

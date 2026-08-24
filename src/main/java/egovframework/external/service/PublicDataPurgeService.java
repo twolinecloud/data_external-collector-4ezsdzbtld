@@ -12,6 +12,7 @@ import egovframework.external.utility.PipelineLogUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.function.IntUnaryOperator;
@@ -41,8 +42,19 @@ import java.util.function.IntUnaryOperator;
  * "적재 건수"로 집계되는 지표에 삭제 건수가 섞여 의미가 왜곡되므로(2026-08-24 판단) 일단
  * 로컬 로그({@link PipelineLogUtils})로만 남긴다 - 필요해지면 PL에게 stepTypeCd 추가를
  * 요청하고 그때 연동.</p>
+ *
+ * <p><b>{@code public-data.purge.enabled=true}일 때만 빈으로 등록됨(2026-08-24 수정)</b> -
+ * 이 서비스가 생성자에서 admin-db 매퍼 7개를 직접 요구하는데, 그 매퍼들은
+ * {@code AdminDbConfig}가 활성화될 때만(=admin-db 관련 플래그 중 하나라도 켜져있을 때만)
+ * 빈으로 존재한다. 이전엔 이 서비스가 무조건부 빈이라 admin-db 관련 플래그가 <b>전부</b>
+ * 기본값(꺼짐)이면 매퍼 빈을 못 찾아 앱이 부팅 자체를 못 하는 잠재 버그가 있었음(실측,
+ * 2026-08-24 - facility-sync 개발 중 admin-db 플래그를 전부 끈 상태로 부팅해보다가 발견) -
+ * {@code KmaUltraSrtNcstLoader} 등 다른 admin-db 소비자들처럼 조건부 빈으로 바꿔 해결.
+ * {@code PublicDataPurgeScheduler}/{@code PublicDataPurgeController}도 이 서비스에
+ * 의존하므로 동일 조건을 달아야 함(같이 수정).</p>
  */
 @Service
+@ConditionalOnProperty(prefix = "public-data.purge", name = "enabled", havingValue = "true")
 public class PublicDataPurgeService {
 
     private static final Logger logger = LogManager.getLogger(PublicDataPurgeService.class);

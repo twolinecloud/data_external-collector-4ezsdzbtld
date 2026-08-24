@@ -6,6 +6,7 @@ import egovframework.external.response.Response;
 import egovframework.external.service.FacilitySyncService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,10 +20,14 @@ import java.util.concurrent.Callable;
 /**
  * 교정기관 목록 자동 동기화 조회/수동 트리거/검토 승인 API. {@code tb_dim_instt}(대시보드
  * 관리 기관 마스터) 대비 우리 시설 목록의 변경분을 확인·확정하고 싶을 때 사용.
+ *
+ * <p>{@code public-data.facility-sync.enabled=true}일 때만 빈으로 등록됨(2026-08-24 수정) -
+ * {@code FacilitySyncService} 클래스 주석 참고(꺼져있으면 이 API 자체가 404).</p>
  */
 @Tag(name = "PublicData-FacilitySync", description = "교정기관 목록 자동 동기화(tb_dim_instt 대조) 조회/수동 트리거/승인 API")
 @RequiredArgsConstructor
 @RestController
+@ConditionalOnProperty(prefix = "public-data.facility-sync", name = "enabled", havingValue = "true")
 @RequestMapping("/public-data/facility-sync")
 public class FacilitySyncController {
 
