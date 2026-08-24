@@ -55,7 +55,9 @@ public class LogCollectorBatchService {
         "kma-village-forecast-vilage-fcst", "단기예보조회(전 지역)",
         "kma-weather-warning-list", "기상특보목록조회",
         "moleg-criminal-law", "형사법령 본문조회(전체)",
-        "safetydata-disaster-msg-list", "긴급재난문자 목록조회"
+        "safetydata-disaster-msg-list", "긴급재난문자 목록조회",
+        "kma-living-uv-idx", "자외선지수조회(전 시도)",
+        "kma-living-air-diffusion-idx", "대기정체지수조회(전 시도)"
     );
 
     private final LogCollectorClient client;

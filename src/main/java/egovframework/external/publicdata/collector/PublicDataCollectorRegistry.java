@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
  * (hot-reload 아님)
  * (3) {@link MolegLawCollectorFactory}가 형사법령 44건만큼 만들어내는 인스턴스 - 마찬가지로
  * 개별 빈 대신 팩토리로 관리, 법령 추가/제외도 CSV만 고치면 됨(hot-reload 아님, 재기동 필요).
+ * (4) {@link LivingWthrIdxCollectorFactory}가 생활기상지수 2개 오퍼레이션 × 16개 시도만큼
+ * 만들어내는 인스턴스(2026-08-24 추가) - 동일한 팩토리 관리 원칙.
  * </p>
  */
 @Component
@@ -35,10 +37,13 @@ public class PublicDataCollectorRegistry {
 
     public PublicDataCollectorRegistry(List<PublicDataCollector> springManagedCollectors,
             KmaLocationCollectorFactory locationCollectorFactory,
-            MolegLawCollectorFactory lawCollectorFactory) {
+            MolegLawCollectorFactory lawCollectorFactory,
+            LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory) {
         List<PublicDataCollector> all = new ArrayList<>(springManagedCollectors);
         all.addAll(locationCollectorFactory.allLocationBasedCollectors());
         all.addAll(lawCollectorFactory.allLawCollectors());
+        all.addAll(livingWthrIdxCollectorFactory.uvIdxCollectors());
+        all.addAll(livingWthrIdxCollectorFactory.airDiffusionIdxCollectors());
         this.collectorsByKey = all.stream()
                 .collect(Collectors.toUnmodifiableMap(PublicDataCollector::key, Function.identity()));
     }

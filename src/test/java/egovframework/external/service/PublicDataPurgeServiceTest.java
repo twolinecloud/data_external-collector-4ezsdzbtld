@@ -2,6 +2,8 @@ package egovframework.external.service;
 
 import egovframework.external.model.PurgeResult;
 import egovframework.external.publicdata.loader.mapper.DisasterMsgMapper;
+import egovframework.external.publicdata.loader.mapper.LivingAirDiffusionIdxMapper;
+import egovframework.external.publicdata.loader.mapper.LivingUvIdxMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherNcstMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherUltraFcstMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherVilageFcstMapper;
@@ -42,10 +44,17 @@ class PublicDataPurgeServiceTest {
     @Mock
     private DisasterMsgMapper disasterMsgMapper;
 
+    @Mock
+    private LivingUvIdxMapper livingUvIdxMapper;
+
+    @Mock
+    private LivingAirDiffusionIdxMapper livingAirDiffusionIdxMapper;
+
     private PublicDataPurgeService service(boolean enabled) {
         return new PublicDataPurgeService(
             weatherNcstMapper, weatherUltraFcstMapper, weatherVilageFcstMapper,
-            weatherWarningMapper, disasterMsgMapper, enabled, RETENTION_DAYS);
+            weatherWarningMapper, disasterMsgMapper, livingUvIdxMapper, livingAirDiffusionIdxMapper,
+            enabled, RETENTION_DAYS);
     }
 
     @Test
@@ -57,16 +66,18 @@ class PublicDataPurgeServiceTest {
     }
 
     @Test
-    void enabled가_true면_5개_테이블_모두_삭제하고_건수를_합산한다() {
+    void enabled가_true면_7개_테이블_모두_삭제하고_건수를_합산한다() {
         when(weatherNcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(1);
         when(weatherUltraFcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(6);
         when(weatherVilageFcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(66);
         when(weatherWarningMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(921);
         when(disasterMsgMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(30);
+        when(livingUvIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(10);
+        when(livingAirDiffusionIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(20);
 
         PurgeResult result = service(true).purgeExpired();
 
-        assertThat(result).isEqualTo(new PurgeResult(1 + 6 + 66 + 921 + 30, 5, 0));
+        assertThat(result).isEqualTo(new PurgeResult(1 + 6 + 66 + 921 + 30 + 10 + 20, 7, 0));
     }
 
     @Test
@@ -77,9 +88,11 @@ class PublicDataPurgeServiceTest {
         when(weatherVilageFcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(66);
         when(weatherWarningMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(921);
         when(disasterMsgMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(30);
+        when(livingUvIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(10);
+        when(livingAirDiffusionIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(20);
 
         PurgeResult result = service(true).purgeExpired();
 
-        assertThat(result).isEqualTo(new PurgeResult(1 + 66 + 921 + 30, 4, 1));
+        assertThat(result).isEqualTo(new PurgeResult(1 + 66 + 921 + 30 + 10 + 20, 6, 1));
     }
 }

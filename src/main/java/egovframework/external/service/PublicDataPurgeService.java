@@ -2,6 +2,8 @@ package egovframework.external.service;
 
 import egovframework.external.model.PurgeResult;
 import egovframework.external.publicdata.loader.mapper.DisasterMsgMapper;
+import egovframework.external.publicdata.loader.mapper.LivingAirDiffusionIdxMapper;
+import egovframework.external.publicdata.loader.mapper.LivingUvIdxMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherNcstMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherUltraFcstMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherVilageFcstMapper;
@@ -20,10 +22,11 @@ import java.util.function.IntUnaryOperator;
  * 노출, 이후 폐기") 요구사항. {@code PublicDataLoadService}와 대칭 구조이되, 대상이
  * "raw_staging의 CLEANSED 행"이 아니라 "admin-db 최종 테이블 5개"라는 점이 다르다.
  *
- * <p><b>대상 테이블 5개</b> - {@code tb_ext_weather_ncst}/{@code _ultra_fcst}/
- * {@code _vilage_fcst}/{@code _warning}/{@code tb_ext_disaster_msg}. {@code tb_ext_law_target}
- * (수집 대상 "목록", 시계열 데이터 아님)과 {@code tb_ext_weather_facility}(마스터 테이블)는
- * 폐기 대상이 아니다.</p>
+ * <p><b>대상 테이블 7개</b> - {@code tb_ext_weather_ncst}/{@code _ultra_fcst}/
+ * {@code _vilage_fcst}/{@code _warning}/{@code tb_ext_disaster_msg}/
+ * {@code tb_ext_living_uv_idx}/{@code tb_ext_living_air_diffusion_idx}(2026-08-24 추가).
+ * {@code tb_ext_law_target}(수집 대상 "목록", 시계열 데이터 아님)과
+ * {@code tb_ext_weather_facility}(마스터 테이블)는 폐기 대상이 아니다.</p>
  *
  * <p><b>기준 컬럼은 {@code reg_dtm}(적재 시각)</b> - "실행일시로부터"라는 요구사항 문구가
  * 관측/예보 대상 시각(base_dtm 등 업무 시각)이 아니라 우리가 이 행을 적재한 시각 기준임을
@@ -51,6 +54,8 @@ public class PublicDataPurgeService {
     private final WeatherVilageFcstMapper weatherVilageFcstMapper;
     private final WeatherWarningMapper weatherWarningMapper;
     private final DisasterMsgMapper disasterMsgMapper;
+    private final LivingUvIdxMapper livingUvIdxMapper;
+    private final LivingAirDiffusionIdxMapper livingAirDiffusionIdxMapper;
     private final boolean enabled;
     private final int retentionDays;
 
@@ -60,6 +65,8 @@ public class PublicDataPurgeService {
         WeatherVilageFcstMapper weatherVilageFcstMapper,
         WeatherWarningMapper weatherWarningMapper,
         DisasterMsgMapper disasterMsgMapper,
+        LivingUvIdxMapper livingUvIdxMapper,
+        LivingAirDiffusionIdxMapper livingAirDiffusionIdxMapper,
         @Value("${public-data.purge.enabled:false}") boolean enabled,
         @Value("${public-data.purge.retention-days:30}") int retentionDays
     ) {
@@ -68,12 +75,14 @@ public class PublicDataPurgeService {
         this.weatherVilageFcstMapper = weatherVilageFcstMapper;
         this.weatherWarningMapper = weatherWarningMapper;
         this.disasterMsgMapper = disasterMsgMapper;
+        this.livingUvIdxMapper = livingUvIdxMapper;
+        this.livingAirDiffusionIdxMapper = livingAirDiffusionIdxMapper;
         this.enabled = enabled;
         this.retentionDays = retentionDays;
     }
 
     /**
-     * 대상 테이블 5개에서 {@code retentionDays}일 초과 행을 각각 삭제한다. 테이블 하나가
+     * 대상 테이블 7개에서 {@code retentionDays}일 초과 행을 각각 삭제한다. 테이블 하나가
      * 실패해도(DB 오류 등) 나머지 테이블은 계속 시도한다.
      *
      * @return 삭제 총 건수 / 성공한 테이블 수 / 실패한 테이블 수 (enabled=false면 전부 0)
@@ -89,6 +98,8 @@ public class PublicDataPurgeService {
             purgeOne("tb_ext_weather_vilage_fcst", weatherVilageFcstMapper::deleteOlderThan),
             purgeOne("tb_ext_weather_warning", weatherWarningMapper::deleteOlderThan),
             purgeOne("tb_ext_disaster_msg", disasterMsgMapper::deleteOlderThan),
+            purgeOne("tb_ext_living_uv_idx", livingUvIdxMapper::deleteOlderThan),
+            purgeOne("tb_ext_living_air_diffusion_idx", livingAirDiffusionIdxMapper::deleteOlderThan),
         };
 
         int totalDeleted = 0;

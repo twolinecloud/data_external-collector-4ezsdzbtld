@@ -83,6 +83,10 @@ public-data:
       cron: "0 0 5 * * *"
     safetydata-disaster-msg-list:
       cron: "0 */10 * * * *"
+    kma-living-uv-idx:
+      cron: "0 10 0,3,6,9,12,15,18,21 * * *"
+    kma-living-air-diffusion-idx:
+      cron: "0 10 0,3,6,9,12,15,18,21 * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
@@ -118,6 +122,14 @@ public-data:
       # 위치의존 오퍼레이션의 지역 목록은 classpath:kma-facility-locations.csv (전국 교정기관 59개소,
       # private-doc 24/25번 항목 참고) - FacilityLocationLoader가 읽어서 KmaLocationCollectorFactory가
       # 오퍼레이션×지역 조합으로 컬렉터를 생성한다. 지역 추가/변경은 그 CSV만 고치면 됨.
+    living-wthr-idx:
+      # 생활기상지수(자외선지수/대기정체지수) - 2026-08-24 신규, 교정시설 야외활동 참고용
+      # (task 요청). areaNo(시도 코드) 목록은 classpath:kma-living-wthr-idx-area.csv(17개
+      # 시도) - LivingWthrIdxAreaLoader가 읽어서 LivingWthrIdxCollectorFactory가 시도 수만큼
+      # 컬렉터를 생성한다. areaNo/time 파라미터 형식은 실제 서비스키로 실측 확인 완료
+      # (2026-08-24, cleanse-db-schema-spec.md §2.8 참고) - 시군구가 아니라 시도 단위 생산.
+      endpoint: ${LIVING_WTHR_IDX_ENDPOINT:https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5}
+      service-key: ${LIVING_WTHR_IDX_SERVICE_KEY:}
   # 법제처(국가법령정보센터) 형사법령정보 - private-doc 31번 항목 참고. LawSourcePort(포트)의
   # 현재 활성 구현은 DirectLawSourceAdapter(직접연결) - 이 연결 자체가 ESB로 이동 예정이라
   # 나중에 스펙이 나오면 이 설정 블록도 ESB 쪽으로 옮겨가고 어댑터만 교체하면 됨.
