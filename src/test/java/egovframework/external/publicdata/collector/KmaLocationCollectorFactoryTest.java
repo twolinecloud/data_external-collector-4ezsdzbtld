@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KmaLocationCollectorFactoryTest {
 
     private final KmaApiClient apiClient = new KmaApiClient(new RestTemplate());
-    private final FacilityLocationLoader locationLoader = new FacilityLocationLoader();
+    private final FacilityLocationLoader locationLoader = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader()));
     private final KmaLocationCollectorFactory factory =
         new KmaLocationCollectorFactory(apiClient, "https://example.invalid", "test-key", locationLoader);
 
@@ -47,5 +47,32 @@ class KmaLocationCollectorFactoryTest {
 
         assertThat(first.apiName()).contains("초단기실황조회").contains("(");
         assertThat(first.sourceName()).isEqualTo("공공데이터포털 (기상청 동네예보)");
+    }
+
+    @Test
+    void 목록을_캐시하지_않고_호출할_때마다_새로_조회한다() {
+        // db 소스일 때 승인된 신규 시설이 재시작 없이 다음 스케줄 틱부터 반영되려면
+        // 생성자 시점이 아니라 매 메서드 호출마다 다시 조회해야 함(Phase C, 2026-08-24).
+        StubFacilityMasterSource stubSource = new StubFacilityMasterSource();
+        stubSource.records = List.of(new FacilityMasterRecord("1", "A", "시도", "시군구", "60", "124"));
+        KmaLocationCollectorFactory dynamicFactory = new KmaLocationCollectorFactory(
+            apiClient, "https://example.invalid", "test-key", new FacilityLocationLoader(stubSource));
+
+        assertThat(dynamicFactory.ultraSrtNcstCollectors()).hasSize(1);
+
+        stubSource.records = List.of(
+            new FacilityMasterRecord("1", "A", "시도", "시군구", "60", "124"),
+            new FacilityMasterRecord("2", "B", "시도", "시군구", "61", "125"));
+
+        assertThat(dynamicFactory.ultraSrtNcstCollectors()).hasSize(2);
+    }
+
+    private static class StubFacilityMasterSource implements FacilityMasterSource {
+        List<FacilityMasterRecord> records = List.of();
+
+        @Override
+        public List<FacilityMasterRecord> current() {
+            return records;
+        }
     }
 }

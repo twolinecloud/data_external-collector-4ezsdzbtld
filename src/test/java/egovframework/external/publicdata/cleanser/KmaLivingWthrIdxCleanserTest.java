@@ -1,5 +1,7 @@
 package egovframework.external.publicdata.cleanser;
 
+import egovframework.external.publicdata.collector.CsvFacilityMasterSource;
+import egovframework.external.publicdata.collector.FacilityMasterCsvLoader;
 import egovframework.external.exception.CleanseException;
 import egovframework.external.publicdata.collector.FacilitySidoLoader;
 import egovframework.external.publicdata.collector.LivingWthrIdxAreaLoader;
@@ -19,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KmaLivingWthrIdxCleanserTest {
 
     private final KmaLivingWthrIdxCleanser cleanser =
-        new KmaLivingWthrIdxCleanser(new LivingWthrIdxAreaLoader(), new FacilitySidoLoader());
+        new KmaLivingWthrIdxCleanser(new LivingWthrIdxAreaLoader(), new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())));
 
     @Test
     void operationKey로_두_오퍼레이션_모두_지원한다() {

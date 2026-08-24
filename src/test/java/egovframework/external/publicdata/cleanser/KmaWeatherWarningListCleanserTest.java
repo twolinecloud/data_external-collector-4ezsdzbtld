@@ -1,5 +1,7 @@
 package egovframework.external.publicdata.cleanser;
 
+import egovframework.external.publicdata.collector.CsvFacilityMasterSource;
+import egovframework.external.publicdata.collector.FacilityMasterCsvLoader;
 import egovframework.external.exception.CleanseException;
 import egovframework.external.publicdata.collector.FacilitySidoLoader;
 import egovframework.external.publicdata.collector.KmaWarningStationLoader;
@@ -21,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class KmaWeatherWarningListCleanserTest {
 
     private final KmaWeatherWarningListCleanser cleanser =
-        new KmaWeatherWarningListCleanser(new KmaWarningStationLoader(), new FacilitySidoLoader());
+        new KmaWeatherWarningListCleanser(new KmaWarningStationLoader(), new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())));
 
     @Test
     void operationKey로만_지원여부를_판단한다() {

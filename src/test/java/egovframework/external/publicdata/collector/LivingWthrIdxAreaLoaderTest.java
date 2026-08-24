@@ -28,7 +28,7 @@ class LivingWthrIdxAreaLoaderTest {
     void 시도명이_시설_CSV_표기와_일치한다() {
         // FacilitySidoLoader의 sido 값과 문자열이 정확히 같아야 매칭이 되므로 실제 값을 고정
         List<LivingWthrIdxArea> all = new LivingWthrIdxAreaLoader().all();
-        List<FacilitySido> facilities = new FacilitySidoLoader().all();
+        List<FacilitySido> facilities = new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         for (FacilitySido facility : facilities) {
             assertThat(all).anyMatch(a -> a.sido().equals(facility.sido()));

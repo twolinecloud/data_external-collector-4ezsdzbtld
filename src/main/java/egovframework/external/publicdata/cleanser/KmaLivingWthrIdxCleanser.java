@@ -36,11 +36,11 @@ public class KmaLivingWthrIdxCleanser implements PublicDataCleanser {
     private static final int[] AIR_OFFSETS = {3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72, 75, 78};
 
     private final List<LivingWthrIdxArea> areas;
-    private final List<FacilitySido> facilities;
+    private final FacilitySidoLoader facilitySidoLoader;
 
     public KmaLivingWthrIdxCleanser(LivingWthrIdxAreaLoader areaLoader, FacilitySidoLoader facilitySidoLoader) {
         this.areas = areaLoader.all();
-        this.facilities = facilitySidoLoader.all();
+        this.facilitySidoLoader = facilitySidoLoader;
     }
 
     @Override
@@ -77,7 +77,7 @@ public class KmaLivingWthrIdxCleanser implements PublicDataCleanser {
             return;
         }
 
-        for (FacilitySido facility : facilities) {
+        for (FacilitySido facility : facilitySidoLoader.all()) {
             if (!facility.sido().equals(area.get().sido())) {
                 continue;
             }

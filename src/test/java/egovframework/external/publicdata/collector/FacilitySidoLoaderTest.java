@@ -10,13 +10,13 @@ class FacilitySidoLoaderTest {
 
     @Test
     void 전국_교정기관_59개소가_모두_로딩된다() {
-        assertThat(new FacilitySidoLoader().all()).hasSize(59);
+        assertThat(new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all()).hasSize(59);
     }
 
     @Test
     void 시도명이_기상특보_지점코드_관할표기와_일치한다() {
         // KmaWarningStation의 jurisdictionSido와 문자열이 정확히 같아야 매칭이 되므로 실제 값을 고정
-        List<FacilitySido> all = new FacilitySidoLoader().all();
+        List<FacilitySido> all = new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         FacilitySido yeongwol = all.stream()
             .filter(f -> f.facilityId().equals("1272038"))

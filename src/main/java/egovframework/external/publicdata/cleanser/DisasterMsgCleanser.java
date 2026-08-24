@@ -42,10 +42,10 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
 
     private static final DateTimeFormatter SOURCE_DATETIME = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
-    private final List<FacilityRegion> facilityRegions;
+    private final FacilityRegionLoader facilityRegionLoader;
 
     public DisasterMsgCleanser(FacilityRegionLoader facilityRegionLoader) {
-        this.facilityRegions = facilityRegionLoader.all();
+        this.facilityRegionLoader = facilityRegionLoader;
     }
 
     @Override
@@ -94,7 +94,7 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
             if (normalized.isEmpty()) {
                 continue;
             }
-            for (FacilityRegion region : facilityRegions) {
+            for (FacilityRegion region : facilityRegionLoader.all()) {
                 if (normalized.startsWith(region.regionKey())) {
                     matchedRegionByFacility.putIfAbsent(region.facilityId(), piece.trim());
                 }

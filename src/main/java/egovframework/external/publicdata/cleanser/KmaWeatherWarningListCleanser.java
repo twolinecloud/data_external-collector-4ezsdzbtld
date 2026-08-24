@@ -36,11 +36,11 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
     private static final Set<String> RAW_ITEM_FIELDS = Set.of("stnId", "title", "tmFc", "tmSeq");
 
     private final List<KmaWarningStation> stations;
-    private final List<FacilitySido> facilities;
+    private final FacilitySidoLoader facilitySidoLoader;
 
     public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilitySidoLoader facilitySidoLoader) {
         this.stations = stationLoader.all();
-        this.facilities = facilitySidoLoader.all();
+        this.facilitySidoLoader = facilitySidoLoader;
     }
 
     @Override
@@ -82,7 +82,7 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
             return;
         }
 
-        for (FacilitySido facility : facilities) {
+        for (FacilitySido facility : facilitySidoLoader.all()) {
             if (!station.get().covers(facility.sido())) {
                 continue;
             }

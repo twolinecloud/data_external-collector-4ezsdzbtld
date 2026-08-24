@@ -1,5 +1,7 @@
 package egovframework.external.rule;
 
+import egovframework.external.publicdata.collector.CsvFacilityMasterSource;
+import egovframework.external.publicdata.collector.FacilityMasterCsvLoader;
 import egovframework.external.dto.RawStagingDto;
 import egovframework.external.publicdata.cleanser.CleansedJsonDropWriter;
 import egovframework.external.publicdata.collector.FacilitySidoLoader;
@@ -30,7 +32,7 @@ class RuleEvaluationServiceTest {
         store = new InMemoryRawStagingStore();
         CleansedJsonDropWriter disabledWriter = new CleansedJsonDropWriter(false, "unused");
         service = new RuleEvaluationService(store, new FacilityVulnerabilityLoader(),
-            new FacilitySidoLoader(), new KmaWarningStationLoader(), disabledWriter);
+            new FacilitySidoLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())), new KmaWarningStationLoader(), disabledWriter);
     }
 
     private void insertCleansed(String operationKey, String facilityId, String collectorKey, String cleansedPayload) {

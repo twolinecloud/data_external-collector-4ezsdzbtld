@@ -16,14 +16,14 @@ class FacilityRegionLoaderTest {
 
     @Test
     void 전국_교정기관_59개소가_모두_로딩된다() {
-        List<FacilityRegion> regions = new FacilityRegionLoader().all();
+        List<FacilityRegion> regions = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         assertThat(regions).hasSize(59);
     }
 
     @Test
     void facilityId는_전부_고유하다() {
-        List<FacilityRegion> regions = new FacilityRegionLoader().all();
+        List<FacilityRegion> regions = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         Set<String> ids = regions.stream().map(FacilityRegion::facilityId).collect(Collectors.toSet());
 
@@ -32,14 +32,14 @@ class FacilityRegionLoaderTest {
 
     @Test
     void regionKey는_공백이_없다() {
-        List<FacilityRegion> regions = new FacilityRegionLoader().all();
+        List<FacilityRegion> regions = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         assertThat(regions).allSatisfy(r -> assertThat(r.regionKey()).doesNotContain(" "));
     }
 
     @Test
     void 특정_기관의_regionKey가_기대한_형태로_조립된다() {
-        List<FacilityRegion> regions = new FacilityRegionLoader().all();
+        List<FacilityRegion> regions = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         FacilityRegion anyang = regions.stream()
             .filter(r -> r.facilityId().equals("1270782")) // 안양교도소
@@ -52,7 +52,7 @@ class FacilityRegionLoaderTest {
     @Test
     void 행정구역_개편_반영본이_그대로_들어있다() {
         // 전남광주통합특별시/강원특별자치도/전북특별자치도 - terrain-rule-base-spec.md §7-6 참고
-        List<FacilityRegion> regions = new FacilityRegionLoader().all();
+        List<FacilityRegion> regions = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         assertThat(regions).anySatisfy(r -> assertThat(r.regionKey()).startsWith("전남광주통합특별시"));
         assertThat(regions).anySatisfy(r -> assertThat(r.regionKey()).startsWith("강원특별자치도"));

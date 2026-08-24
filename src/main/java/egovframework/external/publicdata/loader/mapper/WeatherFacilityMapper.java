@@ -37,7 +37,13 @@ public interface WeatherFacilityMapper {
                 @Param("sidoNm") String sidoNm, @Param("sigunguNm") String sigunguNm,
                 @Param("nx") int nx, @Param("ny") int ny);
 
-    // FacilitySyncService가 tb_dim_instt(대시보드 관리 기관 마스터)와 대조할 때 씀 - 2026-08-24.
-    @Select("SELECT facility_id AS \"facilityId\", facility_nm AS \"facilityNm\" FROM kcais.tb_ext_weather_facility")
+    // FacilitySyncService(tb_dim_instt 대조)와 DbFacilityMasterSource(Phase C, 컬렉터가 실제
+    // 쓰는 기준정보 조회)가 공유해서 씀 - 2026-08-24. sido_nm/sigungu_nm은 approve()로 수동
+    // 좌표를 넘긴 건이면 NULL일 수 있음(WeatherFacilityMapper#upsert 참고).
+    @Select("""
+        SELECT facility_id AS "facilityId", facility_nm AS "facilityNm",
+               sido_nm AS "sidoNm", sigungu_nm AS "sigunguNm", nx AS "nx", ny AS "ny"
+        FROM kcais.tb_ext_weather_facility
+        """)
     List<Map<String, Object>> selectAll();
 }

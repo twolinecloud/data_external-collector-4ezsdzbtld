@@ -30,6 +30,9 @@ import javax.sql.DataSource;
  *   <li>{@code public-data.facility-sync.enabled=true} - 교정기관 목록을 {@code tb_dim_instt}
  *       (대시보드 관리 기관 마스터)와 대조해서 변경분을 검토 큐에 쌓음
  *       ({@code FacilitySyncService} 참고)</li>
+ *   <li>{@code public-data.facility.master-source=db} - 컬렉터가 실제로 쓰는 교정기관 기준정보를
+ *       CSV 대신 admin-db에서 읽음(Phase C, 2026-08-24) - 승인된 신규 시설이 재시작 없이
+ *       다음 스케줄 틱부터 반영됨({@code DbFacilityMasterSource} 참고)</li>
  * </ul>
  *
  * <p>{@link egovframework.external.Main}에서 {@code DataSourceAutoConfiguration}/
@@ -44,7 +47,8 @@ import javax.sql.DataSource;
 @ConditionalOnExpression(
     "${public-data.load.enabled:false} or ${public-data.purge.enabled:false}"
         + " or ${public-data.facility-sync.enabled:false}"
-        + " or '${public-data.moleg.law-target-source:csv}' == 'db'")
+        + " or '${public-data.moleg.law-target-source:csv}' == 'db'"
+        + " or '${public-data.facility.master-source:csv}' == 'db'")
 // annotationClass 지정 필수 - 안 걸면 MyBatis MapperScan이 스캔 범위 내 "모든 인터페이스"를
 // 매퍼로 오인해서 프록시 빈을 만들어버림(실측, 2026-08-21). MolegLawTargetSource 같은 순수
 // 도메인 전략 인터페이스가 "molegLawTargetSource"라는 이름의 가짜 매퍼 빈으로 등록되면서

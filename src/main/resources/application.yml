@@ -128,6 +128,13 @@ public-data:
     # 파이프라인은 안 죽고 검토 큐에 상태만 남는다.
     endpoint: ${VWORLD_ENDPOINT:http://api.vworld.kr/req/address}
     api-key: ${VWORLD_API_KEY:}
+  facility:
+    # 컬렉터가 실제로 쓰는 교정기관 기준정보 출처 - csv(기본값, 지금까지와 동일) | db
+    # (Phase C, 2026-08-24 - tb_ext_weather_facility에서 매 스케줄 틱마다 새로 조회, Phase B의
+    # approve()로 승인된 신규 시설이 재시작 없이 다음 틱부터 실제 수집에 반영됨). db일 때만
+    # AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개). db 조회 실패 시 그 틱만
+    # 빈 목록으로 건너뜀, 앱은 안 죽음(DbFacilityMasterSource).
+    master-source: ${PUBLIC_DATA_FACILITY_MASTER_SOURCE:csv}
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}
