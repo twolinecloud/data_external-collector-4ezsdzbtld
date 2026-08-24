@@ -5,6 +5,26 @@ spring:
     desc: external-collector-4ezsdzbtld RESTful API Service
   jackson:
     date-format: "yyyy-MM-dd'T'HH:mm:ss"
+  # admin-db(kcais, PostgreSQL) - public-data.load.enabled=true일 때만 AdminDbConfig가 이 값으로
+  # 실제 DataSource를 만든다(꺼져있으면 이 블록 자체가 안 읽힘, DataSourceAutoConfiguration도
+  # Main.java에서 제외돼있어 값이 비어있어도 앱 기동에 영향 없음). 로컬 개발 시엔
+  # `kubectl port-forward svc/admin-db-fy9tjq4tsk -n service-core 15432:5432`로 접속 -
+  # private-doc/cleanse-db-schema-spec.md §6 참고.
+  datasource:
+    url: jdbc:postgresql://${ADMIN_DB_HOST:127.0.0.1}:${ADMIN_DB_PORT:15432}/${ADMIN_DB_NAME:correction_ai}?currentSchema=kcais
+    username: ${ADMIN_DB_USER:}
+    password: ${ADMIN_DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    # Hikari 기본값(풀 크기 10, 기동시 즉시 전부 예열)은 우리 워크로드엔 과함 - raw_staging을
+    # 한 줄씩 순차 처리하는 구조라 동시 커넥션이 여러 개 필요 없음. 2026-08-21: 이 기본값 때문에
+    # 로컬 개발 중 반복 재기동으로 admin-db 커넥션 슬롯을 다 소진해 다른 서비스 접속까지 막은 적
+    # 있음 - 풀을 작게 잡고, 오래 열려있는데 안 쓰는 연결은 최대수명을 짧게 둬서 자동 회수되게 함.
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      idle-timeout: 30000        # 30초 이상 노는 연결은 자동 반납(풀 크기가 minimum-idle까지 줄어듦)
+      max-lifetime: 600000       # 10분 넘은 연결은 강제 재생성 - 방치돼도 오래 안 남음
+      leak-detection-threshold: 30000  # 30초 넘게 반납 안 된 커넥션은 경고 로그(실제 코드 누수 감지용)
 
 server:
   port: 8080
@@ -45,3 +65,77 @@ management:
     web:
       exposure:
         include: '*'
+
+# 공공데이터 수집 파이프라인 (data-collector 저장소에서 이관됨, private-doc 19번 항목 참고)
+# 소스(오퍼레이션)별 스케줄은 개별 cron으로 관리 (기본값은 PublicDataCollectorScheduler 코드에도 있음, 여기서 오버라이드 가능)
+# 엔드포인트는 weather-api.docx / data.go.kr 공개 스펙 기준 실제 값. serviceKey는 .env로 로컬 주입
+public-data:
+  collector:
+    kma-village-forecast-ultra-srt-ncst:
+      cron: "0 12 * * * *"
+    kma-village-forecast-ultra-srt-fcst:
+      cron: "0 47 * * * *"
+    kma-village-forecast-vilage-fcst:
+      cron: "0 15 2,5,8,11,14,17,20,23 * * *"
+    kma-weather-warning-list:
+      cron: "0 */10 * * * *"
+    moleg-criminal-law:
+      cron: "0 0 5 * * *"
+    safetydata-disaster-msg-list:
+      cron: "0 */10 * * * *"
+  cleanse:
+    # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
+    cron: "0 */5 * * * *"
+    json-drop:
+      # 정제 결과를 로컬 파일로 즉시 내려받는 디버그/뷰어 전용 부가 기능 (CleansedJsonDropWriter).
+      # 기본 꺼짐 - admin-db 적재 전까지 정제 결과를 눈으로 확인할 방법이 없어서 추가함, 운영에는 영향 없음.
+      enabled: ${PUBLIC_DATA_CLEANSE_JSON_DROP_ENABLED:false}
+      dir: ${PUBLIC_DATA_CLEANSE_JSON_DROP_DIR:private-doc/cleansed-json-drop}
+  load:
+    # admin-db(kcais) 적재 - 2026-08-21 신규. 기본 꺼짐(로그 컬렉터와 동일 원칙) - 켜면
+    # AdminDbConfig가 DataSource/MyBatis 빈을 실제로 만들고, 스케줄러/수동 트리거가 CLEANSED
+    # 상태 raw_staging 행을 admin-db 최종 테이블에 upsert하기 시작한다. 켜기 전에
+    # FacilityMasterSeeder로 tb_ext_weather_facility(마스터)부터 채워야 FK가 성립한다.
+    enabled: ${PUBLIC_DATA_LOAD_ENABLED:false}
+    cron: "0 */5 * * * *"
+  kma:
+    village-forecast:
+      endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}
+      service-key: ${KMA_VILLAGE_FORECAST_SERVICE_KEY:}
+    weather-warning:
+      endpoint: ${KMA_WEATHER_WARNING_ENDPOINT:https://apis.data.go.kr/1360000/WthrWrnInfoService}
+      service-key: ${KMA_WEATHER_WARNING_SERVICE_KEY:}
+      # 위치의존 오퍼레이션의 지역 목록은 classpath:kma-facility-locations.csv (전국 교정기관 59개소,
+      # private-doc 24/25번 항목 참고) - FacilityLocationLoader가 읽어서 KmaLocationCollectorFactory가
+      # 오퍼레이션×지역 조합으로 컬렉터를 생성한다. 지역 추가/변경은 그 CSV만 고치면 됨.
+  # 법제처(국가법령정보센터) 형사법령정보 - private-doc 31번 항목 참고. LawSourcePort(포트)의
+  # 현재 활성 구현은 DirectLawSourceAdapter(직접연결) - 이 연결 자체가 ESB로 이동 예정이라
+  # 나중에 스펙이 나오면 이 설정 블록도 ESB 쪽으로 옮겨가고 어댑터만 교체하면 됨.
+  moleg:
+    endpoint: ${MOLEG_ENDPOINT:https://www.law.go.kr/DRF/lawService.do}
+    # OC(이용자ID)는 법제처에서 별도 발급받는 값 - 로컬 .env에만 있고 git엔 안 올라감
+    oc: ${MOLEG_OC:}
+    # 형사법령 목록은 classpath:moleg-criminal-laws.csv (모법 22개 + 시행령/시행규칙 22개,
+    # 총 44건) - MolegLawListLoader가 읽어서 MolegLawCollectorFactory가 법령별 컬렉터를
+    # 생성한다. 목록 추가/변경은 그 CSV만 고치면 됨.
+    # 법령 "수집 대상 목록"의 출처 - csv(기본값, 지금까지와 동일) | db(admin-db
+    # tb_ext_law_target에서 매 수집 틱마다 새로 조회, 관리자 콘솔 편집 반영용, 2026-08-21).
+    # db일 때만 AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개 - Load를 안 켜도
+    # 이것만 db로 쓸 수 있음). db 조회 실패 시 그날 수집만 0건으로 건너뜀, 앱은 안 죽음.
+    law-target-source: ${PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE:csv}
+  # 재난안전데이터공유플랫폼(행정안전부_긴급재난문자, DSSP-IF-00247) - 2026-08-14 신규.
+  # 서비스키 승인 대기 중이라 아직 라이브 미검증 - 응답 필드는 사용자가 제공한 공식 샘플
+  # (private-doc/safetydata.csv)로 확정했지만, 요청 파라미터/응답 envelope은 추정값임
+  # (DisasterMsgCollector 클래스 주석 참고). 승인되면 가장 먼저 재검증할 것.
+  safetydata:
+    endpoint: ${SAFETYDATA_ENDPOINT:https://www.safetydata.go.kr/V2/api/DSSP-IF-00247}
+    service-key: ${SAFETYDATA_SERVICE_KEY:}
+
+# 로그 컬렉터(Log Collector) 연동 - kcais-admin 플랫폼의 tb_batch_exec_log/tb_batch_step_log/
+# tb_ext_collect_log(T1/T2/T6)에 배치 실행 이력을 남기는 별도 REST API 마이크로서비스.
+# private-doc/log-collector-api-spec.md 참고. 기본값 enabled=false - 아직 PL과 최종
+# "편입 여부"를 확정하지 않았고, 켜면 공유 플랫폼 테이블에 실제 데이터가 남으므로 명시적으로
+# 켜기 전까지는(LOG_COLLECTOR_ENABLED=true) 전 구간이 조용히 no-op 상태를 유지한다.
+log-collector:
+  enabled: ${LOG_COLLECTOR_ENABLED:false}
+  base-url: ${LOG_COLLECTOR_BASE_URL:https://kcais-admin.twolinecloud.com/logc}

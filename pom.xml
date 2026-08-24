@@ -77,11 +77,21 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>  
             <version>2.8.17</version> 
         </dependency>  
-        <dependency> 
-            <groupId>org.springframework.boot</groupId>  
-            <artifactId>spring-boot-starter-test</artifactId>  
-            <scope>test</scope> 
-        </dependency>  
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <!-- jsonassert가 android-json을 물고오는데, 그 안의 org.json.JSONException은
+                     checked exception이라 우리가 쓰는 실제 org.json:json(unchecked)과 클래스명이
+                     겹쳐서 테스트 컴파일 시 심볼이 잘못 해석됨(unreported exception 컴파일 에러).
+                     jsonassert 자체(JSONAssert.assertEquals 등)는 안 쓰므로 통째로 제외. -->
+                <exclusion>
+                    <groupId>org.skyscreamer</groupId>
+                    <artifactId>jsonassert</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency> 
             <groupId>org.json</groupId>  
             <artifactId>json</artifactId>  
@@ -120,12 +130,26 @@
             <artifactId>egovframe-rte-fdl-property</artifactId>  
             <version>5.0.0</version> 
         </dependency>
-        <dependency> 
-            <groupId>org.egovframe.rte</groupId>  
-            <artifactId>egovframe-rte-fdl-string</artifactId>  
-            <version>5.0.0</version> 
+        <dependency>
+            <groupId>org.egovframe.rte</groupId>
+            <artifactId>egovframe-rte-fdl-string</artifactId>
+            <version>5.0.0</version>
         </dependency>
-    </dependencies>  
+        <!-- admin-db(kcais, PostgreSQL) 적재(Load) 단계용 - 2026-08-21 신규.
+             AdminDbConfig에서 public-data.load.enabled=true일 때만 실제로 빈이 만들어짐
+             (DataSourceAutoConfiguration/MybatisAutoConfiguration은 Main.java에서 제외해뒀음 -
+             비활성 상태에선 DB 연결 시도 자체가 없어 기존 개발 흐름에 영향 없음). -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>3.0.4</version>
+        </dependency>
+    </dependencies>
     <profiles> 
         <profile> 
             <id>default</id>  
