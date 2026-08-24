@@ -3,7 +3,9 @@ package egovframework.external.publicdata.loader.mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,4 +36,8 @@ public interface WeatherFacilityMapper {
                 @Param("lat") Double lat, @Param("lon") Double lon,
                 @Param("sidoNm") String sidoNm, @Param("sigunguNm") String sigunguNm,
                 @Param("nx") int nx, @Param("ny") int ny);
+
+    // FacilitySyncService가 tb_dim_instt(대시보드 관리 기관 마스터)와 대조할 때 씀 - 2026-08-24.
+    @Select("SELECT facility_id AS \"facilityId\", facility_nm AS \"facilityNm\" FROM kcais.tb_ext_weather_facility")
+    List<Map<String, Object>> selectAll();
 }

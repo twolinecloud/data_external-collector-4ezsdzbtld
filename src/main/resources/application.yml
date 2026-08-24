@@ -112,6 +112,15 @@ public-data:
     enabled: ${PUBLIC_DATA_PURGE_ENABLED:false}
     retention-days: ${PUBLIC_DATA_PURGE_RETENTION_DAYS:30}
     cron: "0 0 3 * * *"
+  facility-sync:
+    # 교정기관 목록 자동 동기화(Phase A, 2026-08-24 신규) - 대시보드 팀이 관리하는
+    # tb_dim_instt(기관 마스터)와 우리 tb_ext_weather_facility를 매일 새벽 4시에 대조해서
+    # 변경분(신규/제외검토)을 tb_ext_facility_review_queue에 쌓는다. 아직 CSV를 자동으로
+    # 고치진 않음 - 신규 시설은 좌표 자동 지오코딩(Phase B, 미구현)이 붙기 전까지 사람이
+    # 큐를 보고 직접 kma-facility-locations.csv에 추가해야 한다. 기본 꺼짐(Load와 동일 원칙).
+    # 수동 트리거는 POST /public-data/facility-sync/run, 조회는 GET .../queue.
+    enabled: ${PUBLIC_DATA_FACILITY_SYNC_ENABLED:false}
+    cron: "0 0 4 * * *"
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

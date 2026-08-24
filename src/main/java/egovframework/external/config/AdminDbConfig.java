@@ -18,14 +18,18 @@ import javax.sql.DataSource;
 
 /**
  * admin-db(kcais, PostgreSQL) 연결 설정. 다음 중 하나라도 켜져있을 때만 빈이 만들어진다
- * (2026-08-21 OR 조건으로 확장, 2026-08-24 purge 추가) - 꺼져있으면 DataSource/MyBatis 관련
- * 빈이 전혀 생성되지 않아 DB 연결정보 없이도 앱이 정상 기동한다(로그 컬렉터와 동일한 원칙):
+ * (2026-08-21 OR 조건으로 확장, 2026-08-24 purge/facility-sync 추가) - 꺼져있으면
+ * DataSource/MyBatis 관련 빈이 전혀 생성되지 않아 DB 연결정보 없이도 앱이 정상 기동한다
+ * (로그 컬렉터와 동일한 원칙):
  * <ul>
  *   <li>{@code public-data.load.enabled=true} - 수집/정제 결과를 admin-db 최종 테이블에 적재</li>
  *   <li>{@code public-data.moleg.law-target-source=db} - 법령 수집 대상 목록을 admin-db에서 읽음
  *       (Load와는 별개 관심사 - 목록 "읽기"만 하고 "쓰기"는 없음, {@code MolegLawTargetSource} 참고)</li>
  *   <li>{@code public-data.purge.enabled=true} - admin-db 최종 테이블의 보존기간 초과 데이터를
  *       주기적으로 삭제({@code PublicDataPurgeService} 참고)</li>
+ *   <li>{@code public-data.facility-sync.enabled=true} - 교정기관 목록을 {@code tb_dim_instt}
+ *       (대시보드 관리 기관 마스터)와 대조해서 변경분을 검토 큐에 쌓음
+ *       ({@code FacilitySyncService} 참고)</li>
  * </ul>
  *
  * <p>{@link egovframework.external.Main}에서 {@code DataSourceAutoConfiguration}/
@@ -39,6 +43,7 @@ import javax.sql.DataSource;
 @Configuration
 @ConditionalOnExpression(
     "${public-data.load.enabled:false} or ${public-data.purge.enabled:false}"
+        + " or ${public-data.facility-sync.enabled:false}"
         + " or '${public-data.moleg.law-target-source:csv}' == 'db'")
 // annotationClass 지정 필수 - 안 걸면 MyBatis MapperScan이 스캔 범위 내 "모든 인터페이스"를
 // 매퍼로 오인해서 프록시 빈을 만들어버림(실측, 2026-08-21). MolegLawTargetSource 같은 순수
