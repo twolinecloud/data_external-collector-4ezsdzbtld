@@ -98,6 +98,16 @@ public-data:
     # FacilityMasterSeeder로 tb_ext_weather_facility(마스터)부터 채워야 FK가 성립한다.
     enabled: ${PUBLIC_DATA_LOAD_ENABLED:false}
     cron: "0 */5 * * * *"
+  purge:
+    # admin-db 보존기간 초과 데이터 자동 폐기 - 2026-08-24 신규, task-spec.md 11번 항목
+    # ("비식별화(저장)/전송 데이터는 실행일시로부터 1개월만 노출, 이후 폐기") 요구사항 구현.
+    # 기본 꺼짐(Load와 동일 원칙) - 켜면 AdminDbConfig가 활성화되고 매일 새벽 3시에
+    # reg_dtm(적재 시각) 기준 retention-days 초과 행을 최종 테이블 5개(ncst/ultra_fcst/
+    # vilage_fcst/warning/disaster_msg)에서 삭제한다. law_target/weather_facility(마스터
+    # 테이블)는 폐기 대상 아님. 수동 트리거는 POST /public-data/purge/run.
+    enabled: ${PUBLIC_DATA_PURGE_ENABLED:false}
+    retention-days: ${PUBLIC_DATA_PURGE_RETENTION_DAYS:30}
+    cron: "0 0 3 * * *"
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

@@ -1,7 +1,9 @@
 package egovframework.external.publicdata.loader.mapper;
 
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.Map;
 
@@ -27,4 +29,8 @@ public interface WeatherVilageFcstMapper {
             collect_dtm = EXCLUDED.collect_dtm, cleanse_dtm = EXCLUDED.cleanse_dtm
         """)
     void upsert(Map<String, Object> p);
+
+    // reg_dtm(적재 시각) 기준 보존정책 삭제 - WeatherNcstMapper#deleteOlderThan 주석 참고.
+    @Delete("DELETE FROM kcais.tb_ext_weather_vilage_fcst WHERE reg_dtm < now() - make_interval(days => #{retentionDays})")
+    int deleteOlderThan(@Param("retentionDays") int retentionDays);
 }
