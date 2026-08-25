@@ -12,7 +12,13 @@ import java.util.List;
  * <p>59×3=177개를 개별 {@code @Component} 빈으로 등록하는 대신, 이 팩토리 하나가 목록을
  * 만들어 {@code PublicDataCollectorRegistry}/{@code PublicDataCollectorScheduler}에
  * 공급한다. 지역이 추가/변경되면 {@code kma-facility-locations.csv}만 고치면 됨 - 코드
- * 변경 불필요.</p>
+ * 변경 불필요(db 소스일 때는 CSV 대신 승인된 admin-db 시설이 자동 반영됨, Phase C
+ * 2026-08-24).</p>
+ *
+ * <p><b>목록을 캐시하지 않는다</b> - {@code FacilityLocationLoader#all()}을 세 메서드가
+ * 호출될 때마다 매번 새로 부른다({@code MolegLawCollectorFactory}와 동일 원칙).
+ * {@code PublicDataCollectorScheduler}가 스케줄 틱마다 이 메서드들을 다시 호출하므로,
+ * db 소스일 때 승인된 신규 시설이 앱 재시작 없이 다음 틱부터 바로 수집 대상에 들어간다.</p>
  */
 @Component
 public class KmaLocationCollectorFactory {
@@ -20,7 +26,7 @@ public class KmaLocationCollectorFactory {
     private final KmaApiClient apiClient;
     private final String villageForecastEndpoint;
     private final String villageForecastServiceKey;
-    private final List<Location> locations;
+    private final FacilityLocationLoader facilityLocationLoader;
 
     public KmaLocationCollectorFactory(
         KmaApiClient apiClient,
@@ -31,23 +37,23 @@ public class KmaLocationCollectorFactory {
         this.apiClient = apiClient;
         this.villageForecastEndpoint = villageForecastEndpoint;
         this.villageForecastServiceKey = villageForecastServiceKey;
-        this.locations = facilityLocationLoader.all();
+        this.facilityLocationLoader = facilityLocationLoader;
     }
 
     public List<PublicDataCollector> ultraSrtNcstCollectors() {
-        return locations.stream()
+        return facilityLocationLoader.all().stream()
             .<PublicDataCollector>map(loc -> new KmaUltraSrtNcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc))
             .toList();
     }
 
     public List<PublicDataCollector> ultraSrtFcstCollectors() {
-        return locations.stream()
+        return facilityLocationLoader.all().stream()
             .<PublicDataCollector>map(loc -> new KmaUltraSrtFcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc))
             .toList();
     }
 
     public List<PublicDataCollector> vilageFcstCollectors() {
-        return locations.stream()
+        return facilityLocationLoader.all().stream()
             .<PublicDataCollector>map(loc -> new KmaVilageFcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc))
             .toList();
     }

@@ -7,6 +7,7 @@ import egovframework.external.model.ExecutionType;
 import egovframework.external.publicdata.collector.DisasterMsgCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
 import egovframework.external.publicdata.collector.KmaWeatherWarningListCollector;
+import egovframework.external.publicdata.collector.LivingWthrIdxCollectorFactory;
 import egovframework.external.publicdata.collector.MolegLawCollectorFactory;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.service.PublicDataCollectionAttemptService;
@@ -48,6 +49,7 @@ public class PublicDataCollectorScheduler {
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
+    private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
     private final LogCollectorBatchService logCollectorBatchService;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
@@ -91,6 +93,21 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.safetydata-disaster-msg-list.cron:0 */10 * * * *}")
     public void collectDisasterMsgList() {
         runAll("safetydata-disaster-msg-list", List.of(disasterMsgCollector));
+    }
+
+    /**
+     * 자외선지수: 1일 8회(00/03/06/09/12/15/18/21시 KST) 발표, 10분 이후 제공 -> 발표시각
+     * 10분 후에 전국 16개 시도 순회 수집(실측 확인, 2026-08-24 - 정각에도 이미 응답됨).
+     */
+    @Scheduled(cron = "${public-data.collector.kma-living-uv-idx.cron:0 10 0,3,6,9,12,15,18,21 * * *}")
+    public void collectKmaLivingUvIdx() {
+        runAll("kma-living-uv-idx", livingWthrIdxCollectorFactory.uvIdxCollectors());
+    }
+
+    /** 대기정체지수: 자외선지수와 동일 발표주기 - {@link #collectKmaLivingUvIdx()} 참고. */
+    @Scheduled(cron = "${public-data.collector.kma-living-air-diffusion-idx.cron:0 10 0,3,6,9,12,15,18,21 * * *}")
+    public void collectKmaLivingAirDiffusionIdx() {
+        runAll("kma-living-air-diffusion-idx", livingWthrIdxCollectorFactory.airDiffusionIdxCollectors());
     }
 
     /** operationKey 1틱 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소 순회도 배치 하나). */

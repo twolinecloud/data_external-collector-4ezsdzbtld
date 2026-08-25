@@ -1,5 +1,7 @@
 package egovframework.external.publicdata.cleanser;
 
+import egovframework.external.publicdata.collector.CsvFacilityMasterSource;
+import egovframework.external.publicdata.collector.FacilityMasterCsvLoader;
 import egovframework.external.exception.CleanseException;
 import egovframework.external.publicdata.collector.FacilityRegion;
 import egovframework.external.publicdata.collector.FacilityRegionLoader;
@@ -30,7 +32,7 @@ class DisasterMsgCleanserTest {
      * 오버라이드한다(생성자는 실제 classpath CSV를 여전히 읽지만 결과는 안 씀 - 무해함).
      */
     private DisasterMsgCleanser cleanser() {
-        FacilityRegionLoader fixedLoader = new FacilityRegionLoader() {
+        FacilityRegionLoader fixedLoader = new FacilityRegionLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())) {
             @Override
             public List<FacilityRegion> all() {
                 return REGIONS;

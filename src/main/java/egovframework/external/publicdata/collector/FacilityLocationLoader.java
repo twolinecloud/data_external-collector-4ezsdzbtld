@@ -1,22 +1,13 @@
 package egovframework.external.publicdata.collector;
 
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
- * {@code classpath:kma-facility-locations.csv}(전국 교정기관 59개소 격자좌표)를 읽어
- * {@link Location} 목록으로 제공.
- *
- * <p>CSV 컬럼: facilityId,facilityName,sido,sigungu,nx,ny,lat,lon. 이 로더는 nx,ny만 읽는다
- * (sido/sigungu/lat/lon은 참고용 컬럼).</p>
+ * 전국 교정기관 격자좌표를 {@link Location} 목록으로 제공 - {@link FacilityMasterSource}
+ * (csv/db, Phase C 2026-08-24)의 결과를 매번 새로 매핑한다(캐시 안 함 - db 소스일 때
+ * 승인된 신규 시설이 재시작 없이 다음 조회부터 바로 반영되게 하기 위함).
  *
  * <p>격자좌표는 <b>시설 실좌표</b>를 기상청 격자변환식(dfs_xy_conv)에 넣어 산출한 값이다.
  * 이전에는 기상청 공식 매핑표의 읍면동 대표점 격자를 썼는데, 교정시설이 읍면동 중심에서
@@ -29,38 +20,15 @@ import java.util.List;
 @Component
 public class FacilityLocationLoader {
 
-    private static final String RESOURCE_PATH = "kma-facility-locations.csv";
+    private final FacilityMasterSource facilityMasterSource;
 
-    private final List<Location> locations;
-
-    public FacilityLocationLoader() {
-        this.locations = Collections.unmodifiableList(load());
+    public FacilityLocationLoader(FacilityMasterSource facilityMasterSource) {
+        this.facilityMasterSource = facilityMasterSource;
     }
 
     public List<Location> all() {
-        return locations;
-    }
-
-    private List<Location> load() {
-        List<Location> result = new ArrayList<>();
-        ClassPathResource resource = new ClassPathResource(RESOURCE_PATH);
-        try (BufferedReader reader = new BufferedReader(
-            new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
-            String line = reader.readLine(); // header
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank()) {
-                    continue;
-                }
-                String[] cols = line.split(",", -1);
-                // facilityId,facilityName,sido,sigungu,nx,ny
-                result.add(new Location(cols[0], cols[1], cols[4], cols[5]));
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("기관 격자좌표 리소스(" + RESOURCE_PATH + ") 로딩 실패", e);
-        }
-        if (result.isEmpty()) {
-            throw new IllegalStateException("기관 격자좌표 리소스(" + RESOURCE_PATH + ")에 데이터가 없음");
-        }
-        return result;
+        return facilityMasterSource.current().stream()
+            .map(r -> new Location(r.facilityId(), r.facilityName(), r.nx(), r.ny()))
+            .toList();
     }
 }

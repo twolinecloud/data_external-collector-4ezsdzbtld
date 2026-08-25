@@ -21,4 +21,11 @@ class KmaDateTimeSupportTest {
 
         assertThat(result).isEqualTo(LocalDateTime.of(2026, 1, 1, 0, 0));
     }
+
+    @Test
+    void 분_없는_yyyyMMddHH_형식도_파싱한다() {
+        LocalDateTime result = KmaDateTimeSupport.parseYyyyMMddHH("2026082412");
+
+        assertThat(result).isEqualTo(LocalDateTime.of(2026, 8, 24, 12, 0));
+    }
 }

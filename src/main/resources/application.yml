@@ -83,6 +83,10 @@ public-data:
       cron: "0 0 5 * * *"
     safetydata-disaster-msg-list:
       cron: "0 */10 * * * *"
+    kma-living-uv-idx:
+      cron: "0 10 0,3,6,9,12,15,18,21 * * *"
+    kma-living-air-diffusion-idx:
+      cron: "0 10 0,3,6,9,12,15,18,21 * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
@@ -98,6 +102,39 @@ public-data:
     # FacilityMasterSeeder로 tb_ext_weather_facility(마스터)부터 채워야 FK가 성립한다.
     enabled: ${PUBLIC_DATA_LOAD_ENABLED:false}
     cron: "0 */5 * * * *"
+  purge:
+    # admin-db 보존기간 초과 데이터 자동 폐기 - 2026-08-24 신규, task-spec.md 11번 항목
+    # ("비식별화(저장)/전송 데이터는 실행일시로부터 1개월만 노출, 이후 폐기") 요구사항 구현.
+    # 기본 꺼짐(Load와 동일 원칙) - 켜면 AdminDbConfig가 활성화되고 매일 새벽 3시에
+    # reg_dtm(적재 시각) 기준 retention-days 초과 행을 최종 테이블 5개(ncst/ultra_fcst/
+    # vilage_fcst/warning/disaster_msg)에서 삭제한다. law_target/weather_facility(마스터
+    # 테이블)는 폐기 대상 아님. 수동 트리거는 POST /public-data/purge/run.
+    enabled: ${PUBLIC_DATA_PURGE_ENABLED:false}
+    retention-days: ${PUBLIC_DATA_PURGE_RETENTION_DAYS:30}
+    cron: "0 0 3 * * *"
+  facility-sync:
+    # 교정기관 목록 자동 동기화(Phase A, 2026-08-24 신규) - 대시보드 팀이 관리하는
+    # tb_dim_instt(기관 마스터)와 우리 tb_ext_weather_facility를 매일 새벽 4시에 대조해서
+    # 변경분(신규/제외검토)을 tb_ext_facility_review_queue에 쌓는다. 아직 CSV를 자동으로
+    # 고치진 않음 - 신규 시설은 좌표 자동 지오코딩(Phase B, 미구현)이 붙기 전까지 사람이
+    # 큐를 보고 직접 kma-facility-locations.csv에 추가해야 한다. 기본 꺼짐(Load와 동일 원칙).
+    # 수동 트리거는 POST /public-data/facility-sync/run, 조회는 GET .../queue.
+    enabled: ${PUBLIC_DATA_FACILITY_SYNC_ENABLED:false}
+    cron: "0 0 4 * * *"
+  vworld:
+    # 국토교통부 공간정보오픈플랫폼 - 신규 시설 주소 자동 지오코딩(Phase B, 2026-08-24)에
+    # 사용. tb_dim_instt.dtladr 주소 상당수가 번지수 마스킹(000/0000)돼있어 실패율이 높을
+    # 것을 전제로 함(FacilitySyncService/VWorldGeocoder 클래스 주석 참고) - 실패해도
+    # 파이프라인은 안 죽고 검토 큐에 상태만 남는다.
+    endpoint: ${VWORLD_ENDPOINT:http://api.vworld.kr/req/address}
+    api-key: ${VWORLD_API_KEY:}
+  facility:
+    # 컬렉터가 실제로 쓰는 교정기관 기준정보 출처 - csv(기본값, 지금까지와 동일) | db
+    # (Phase C, 2026-08-24 - tb_ext_weather_facility에서 매 스케줄 틱마다 새로 조회, Phase B의
+    # approve()로 승인된 신규 시설이 재시작 없이 다음 틱부터 실제 수집에 반영됨). db일 때만
+    # AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개). db 조회 실패 시 그 틱만
+    # 빈 목록으로 건너뜀, 앱은 안 죽음(DbFacilityMasterSource).
+    master-source: ${PUBLIC_DATA_FACILITY_MASTER_SOURCE:csv}
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}
@@ -108,6 +145,14 @@ public-data:
       # 위치의존 오퍼레이션의 지역 목록은 classpath:kma-facility-locations.csv (전국 교정기관 59개소,
       # private-doc 24/25번 항목 참고) - FacilityLocationLoader가 읽어서 KmaLocationCollectorFactory가
       # 오퍼레이션×지역 조합으로 컬렉터를 생성한다. 지역 추가/변경은 그 CSV만 고치면 됨.
+    living-wthr-idx:
+      # 생활기상지수(자외선지수/대기정체지수) - 2026-08-24 신규, 교정시설 야외활동 참고용
+      # (task 요청). areaNo(시도 코드) 목록은 classpath:kma-living-wthr-idx-area.csv(17개
+      # 시도) - LivingWthrIdxAreaLoader가 읽어서 LivingWthrIdxCollectorFactory가 시도 수만큼
+      # 컬렉터를 생성한다. areaNo/time 파라미터 형식은 실제 서비스키로 실측 확인 완료
+      # (2026-08-24, cleanse-db-schema-spec.md §2.8 참고) - 시군구가 아니라 시도 단위 생산.
+      endpoint: ${LIVING_WTHR_IDX_ENDPOINT:https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5}
+      service-key: ${LIVING_WTHR_IDX_SERVICE_KEY:}
   # 법제처(국가법령정보센터) 형사법령정보 - private-doc 31번 항목 참고. LawSourcePort(포트)의
   # 현재 활성 구현은 DirectLawSourceAdapter(직접연결) - 이 연결 자체가 ESB로 이동 예정이라
   # 나중에 스펙이 나오면 이 설정 블록도 ESB 쪽으로 옮겨가고 어댑터만 교체하면 됨.

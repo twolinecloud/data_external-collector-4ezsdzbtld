@@ -56,6 +56,24 @@ class KmaUltraSrtFcstLoaderTest {
     }
 
     @Test
+    void senstemp가_있으면_BigDecimal로_변환해서_적재한다() throws LoadException {
+        RawStagingDto dto = RawStagingDto.builder()
+            .facilityId("1270280")
+            .operationKey("kma-village-forecast-ultra-srt-fcst")
+            .cleansedPayload("[{\"nx\":67,\"ny\":100,\"baseDate\":\"20260821\",\"baseTime\":\"1100\","
+                + "\"fcstDate\":\"20260821\",\"fcstTime\":\"1200\",\"t1h\":\"27\",\"senstemp\":26.8}]")
+            .build();
+
+        loader().load(dto);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mapper, times(1)).upsert(captor.capture());
+        Map<String, Object> p = captor.getValue();
+
+        assertThat((java.math.BigDecimal) p.get("sensTemp")).isEqualByComparingTo("26.8");
+    }
+
+    @Test
     void 여러_행이면_여러번_upsert한다() throws LoadException {
         RawStagingDto dto = RawStagingDto.builder()
             .facilityId("1270280")

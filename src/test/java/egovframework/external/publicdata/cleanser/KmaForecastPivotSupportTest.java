@@ -23,7 +23,7 @@ class KmaForecastPivotSupportTest {
             .put(item("20260805", "0600", "REH", "55"))
             .toString();
 
-        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES);
+        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES, "t1h", "reh", "wsd");
 
         JSONArray rows = new JSONArray(result);
         assertThat(rows.length()).isEqualTo(1);
@@ -41,7 +41,7 @@ class KmaForecastPivotSupportTest {
             .put(item("20260805", "0700", "T1H", "21"))
             .toString();
 
-        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES);
+        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES, "t1h", "reh", "wsd");
 
         JSONArray rows = new JSONArray(result);
         assertThat(rows.length()).isEqualTo(2);
@@ -56,7 +56,7 @@ class KmaForecastPivotSupportTest {
             .put(item("20260805", "0600", "T1H", "20"))
             .toString();
 
-        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES);
+        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES, "t1h", "reh", "wsd");
 
         JSONObject row = new JSONArray(result).getJSONObject(0);
         assertThat(row.isNull("tmn")).isTrue();
@@ -70,7 +70,7 @@ class KmaForecastPivotSupportTest {
             .put(item("20260805", "0900", "TMN", "15"))
             .toString();
 
-        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES);
+        String result = KmaForecastPivotSupport.pivotByForecastTime(raw, CATEGORIES, "t1h", "reh", "wsd");
 
         JSONArray rows = new JSONArray(result);
         for (int i = 0; i < rows.length(); i++) {

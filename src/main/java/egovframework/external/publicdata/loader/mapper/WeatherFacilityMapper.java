@@ -3,7 +3,9 @@ package egovframework.external.publicdata.loader.mapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,4 +36,14 @@ public interface WeatherFacilityMapper {
                 @Param("lat") Double lat, @Param("lon") Double lon,
                 @Param("sidoNm") String sidoNm, @Param("sigunguNm") String sigunguNm,
                 @Param("nx") int nx, @Param("ny") int ny);
+
+    // FacilitySyncService(tb_dim_instt 대조)와 DbFacilityMasterSource(Phase C, 컬렉터가 실제
+    // 쓰는 기준정보 조회)가 공유해서 씀 - 2026-08-24. sido_nm/sigungu_nm은 approve()로 수동
+    // 좌표를 넘긴 건이면 NULL일 수 있음(WeatherFacilityMapper#upsert 참고).
+    @Select("""
+        SELECT facility_id AS "facilityId", facility_nm AS "facilityNm",
+               sido_nm AS "sidoNm", sigungu_nm AS "sigunguNm", nx AS "nx", ny AS "ny"
+        FROM kcais.tb_ext_weather_facility
+        """)
+    List<Map<String, Object>> selectAll();
 }

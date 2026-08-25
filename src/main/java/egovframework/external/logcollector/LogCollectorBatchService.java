@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,11 @@ public class LogCollectorBatchService {
 
     private static final Logger logger = LogManager.getLogger(LogCollectorBatchService.class);
     private static final DateTimeFormatter DTM = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDateTime.now()가
+    // 실제 한국 시각이 아니게 됨 - 로그 컬렉터 화면에 찍히는 startDtm/endDtm은 KST여야 하므로
+    // 명시적으로 지정해야 함(2026-08-25, PL 요청으로 발견 - KMA 컬렉터들에서 겪었던 것과 동일
+    // 버그 패턴인데 이 클래스는 그때 스코프 밖이었음).
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private static final String JOB_ID = "EXTERNAL_API";
     private static final String DATA_TYPE_CD = "EXTERNAL";
@@ -55,7 +61,9 @@ public class LogCollectorBatchService {
         "kma-village-forecast-vilage-fcst", "단기예보조회(전 지역)",
         "kma-weather-warning-list", "기상특보목록조회",
         "moleg-criminal-law", "형사법령 본문조회(전체)",
-        "safetydata-disaster-msg-list", "긴급재난문자 목록조회"
+        "safetydata-disaster-msg-list", "긴급재난문자 목록조회",
+        "kma-living-uv-idx", "자외선지수조회(전 시도)",
+        "kma-living-air-diffusion-idx", "대기정체지수조회(전 시도)"
     );
 
     private final LogCollectorClient client;
@@ -115,7 +123,7 @@ public class LogCollectorBatchService {
         if (!client.isEnabled()) {
             return BatchHandle.inactive();
         }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(KST);
         String startDtm = DTM.format(now);
 
         JSONObject batchBody = new JSONObject()
@@ -148,7 +156,7 @@ public class LogCollectorBatchService {
     }
 
     private void abortBatch(String execId, LocalDateTime startedAt) {
-        String endDtm = DTM.format(LocalDateTime.now());
+        String endDtm = DTM.format(LocalDateTime.now(KST));
         JSONObject body = new JSONObject()
             .put("execStsCd", LogCollectorStatus.FAIL.name())
             .put("endDtm", endDtm)
@@ -163,7 +171,7 @@ public class LogCollectorBatchService {
 
     private void finish(BatchHandle handle, int targetCnt, int successCnt, int failCnt) {
         String status = LogCollectorStatus.aggregate(successCnt, failCnt).name();
-        String endDtm = DTM.format(LocalDateTime.now());
+        String endDtm = DTM.format(LocalDateTime.now(KST));
         long elapsedSec = elapsedSeconds(handle.startedAt());
 
         JSONObject stepFinish = new JSONObject()
@@ -214,6 +222,6 @@ public class LogCollectorBatchService {
     }
 
     private long elapsedSeconds(LocalDateTime startedAt) {
-        return Math.max(0, Duration.between(startedAt, LocalDateTime.now()).getSeconds());
+        return Math.max(0, Duration.between(startedAt, LocalDateTime.now(KST)).getSeconds());
     }
 }

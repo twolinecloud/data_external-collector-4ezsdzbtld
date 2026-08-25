@@ -17,14 +17,14 @@ class FacilityLocationLoaderTest {
 
     @Test
     void 전국_교정기관_59개소가_모두_로딩된다() {
-        List<Location> locations = new FacilityLocationLoader().all();
+        List<Location> locations = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         assertThat(locations).hasSize(59);
     }
 
     @Test
     void facilityId는_전부_고유하다() {
-        List<Location> locations = new FacilityLocationLoader().all();
+        List<Location> locations = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         Set<String> ids = locations.stream().map(Location::facilityId).collect(Collectors.toSet());
 
@@ -33,7 +33,7 @@ class FacilityLocationLoaderTest {
 
     @Test
     void nx_ny는_숫자_형식이다() {
-        List<Location> locations = new FacilityLocationLoader().all();
+        List<Location> locations = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         assertThat(locations).allSatisfy(loc -> {
             assertThat(loc.nx()).matches("\\d+");
@@ -45,7 +45,7 @@ class FacilityLocationLoaderTest {
     void 특정_기관이_기대한_격자좌표로_로딩된다() {
         // 경기도 과천시 대표좌표. facilityId 채번 규칙이 바뀔 수 있으므로 기관명으로
         // 찾는다(f01 같은 특정 ID를 고정 가정하지 않음).
-        List<Location> locations = new FacilityLocationLoader().all();
+        List<Location> locations = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader())).all();
 
         Location seoul = locations.stream()
             .filter(loc -> loc.facilityName().equals("서울지방교정청"))

@@ -108,6 +108,10 @@ public class RuleEvaluationService {
                 sources.getOrDefault(HazardType.LANDSLIDE, Set.of()), now));
             results.add(build(fv.facilityId(), HazardType.FLOOD, fv.floodVuln(), trigger,
                 sources.getOrDefault(HazardType.FLOOD, Set.of()), now));
+            // HIGH_WAVE는 자체 계산 트리거가 없음(강수 트리거 재사용은 의미가 안 맞음 - 클래스
+            // 주석 참고) - 지역신호(기상특보/재난문자)만으로 판단.
+            results.add(build(fv.facilityId(), HazardType.HIGH_WAVE, fv.highWaveVuln(), WeatherTrigger.NONE,
+                sources.getOrDefault(HazardType.HIGH_WAVE, Set.of()), now));
         }
 
         jsonDropWriter.write(DROP_KEY, toJson(results));
@@ -213,7 +217,7 @@ public class RuleEvaluationService {
         }
     }
 
-    /** dstSeNm(재해구분명) → HazardType 매핑 (terrain-rule-base-spec.md §3-2). */
+    /** dstSeNm(재해구분명) → HazardType 매핑 (terrain-rule-base-spec.md §3-2, §8). */
     private HazardType mapDisasterType(String dstSeNm) {
         if (dstSeNm == null) {
             return null;
@@ -221,16 +225,26 @@ public class RuleEvaluationService {
         return switch (dstSeNm) {
             case "산사태" -> HazardType.LANDSLIDE;
             case "호우", "홍수" -> HazardType.FLOOD;
+            case "풍랑" -> HazardType.HIGH_WAVE;
             default -> null;
         };
     }
 
     /**
      * 기상특보 현상명 → HazardType. 산사태는 KMA 특보 현상이 아니라(산림청 소관) 여기 없음 -
-     * 재난문자만이 LANDSLIDE의 지역신호 출처다.
+     * 재난문자만이 LANDSLIDE의 지역신호 출처다. 풍랑/폭풍해일은 둘 다 연안 파고·해일 위험이라
+     * HIGH_WAVE 하나로 묶는다(§8) - 지진해일(쓰나미)은 기상이 아니라 지진이 원인이라 이
+     * "정적취약도×동적트리거" 구조와 안 맞아 범위 밖으로 뺌.
      */
     private HazardType mapWarningPhenomenon(String phenomenon) {
-        return "호우".equals(phenomenon) ? HazardType.FLOOD : null;
+        if (phenomenon == null) {
+            return null;
+        }
+        return switch (phenomenon) {
+            case "호우" -> HazardType.FLOOD;
+            case "풍랑", "폭풍해일" -> HazardType.HIGH_WAVE;
+            default -> null;
+        };
     }
 
     private AlertResult build(String facilityId, HazardType hazard, VulnerabilityGrade vuln,
