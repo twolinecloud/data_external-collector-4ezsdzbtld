@@ -1,6 +1,7 @@
 # compiled output
 /out
 /target
+/logs
 
 # IDEs and editors
 .idea
