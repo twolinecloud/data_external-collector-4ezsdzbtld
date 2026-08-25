@@ -67,9 +67,10 @@ public class FacilitySyncController {
      * 항목은 요청 바디에 {@code lat}/{@code lon}을 직접 넣어야 한다(사람이 조사한 좌표).
      * 자동 지오코딩이 성공한 항목은 바디 없이 호출하면 그 제안값을 그대로 쓴다.
      *
-     * <p><b>주의</b>: admin-db엔 즉시 반영되지만 실제 날씨 수집(스케줄러)은 여전히
-     * {@code kma-facility-locations.csv} 기준이라, 수집을 시작하려면 CSV도 별도로
-     * 수동 반영해야 한다(Phase C 미구현).</p>
+     * <p><b>주의</b>: {@code public-data.facility.master-source=db}(Phase C, 2026-08-24
+     * 완료)면 admin-db 반영만으로 충분 - 재시작 없이 다음 스케줄 틱부터 실제 날씨 수집에
+     * 반영된다. 기본값인 {@code csv}면 여전히 {@code kma-facility-locations.csv}도
+     * 사람이 별도로 반영해야 한다({@link FacilitySyncService} 클래스 주석 참고).</p>
      *
      * @param body {@code {"lat": 37.42, "lon": 126.98}} - 선택, 생략 시 자동 지오코딩 제안값 사용
      */
