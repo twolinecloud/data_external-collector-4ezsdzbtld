@@ -14,6 +14,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +34,10 @@ class LogCollectorClientTest {
 
     private LogCollectorClient client(boolean enabled) {
         return new LogCollectorClient(restTemplate, BASE_URL, enabled);
+    }
+
+    private LogCollectorClient clientWithTimeout(Duration timeout) {
+        return new LogCollectorClient(restTemplate, BASE_URL, true, timeout);
     }
 
     @Test
@@ -126,5 +131,22 @@ class LogCollectorClientTest {
             eq(URI.create(BASE_URL + "/api/v1/logs/batches/exec1/external-collects")),
             eq(HttpMethod.POST), captor.capture(), eq(String.class));
         assertThat((String) captor.getValue().getBody()).contains("\"srcNm\":\"test\"");
+    }
+
+    @Test
+    void 호출이_타임아웃보다_오래_걸리면_예외_없이_empty를_반환한다() {
+        // 실제 운영 타임아웃(30s)을 테스트에서 그대로 기다릴 수 없어, 아주 짧은 타임아웃을
+        // 주입해서(테스트 전용 생성자) 같은 경로를 빠르게 검증한다 - 이 mock 응답 지연은 이
+        // 클라이언트의 전용 단일 스레드(log-collector-call)에서 실행되니 테스트 자체는
+        // 타임아웃 시점에 바로 리턴된다.
+        when(restTemplate.exchange(any(URI.class), eq(HttpMethod.POST), any(), eq(String.class)))
+            .thenAnswer(invocation -> {
+                Thread.sleep(500);
+                return ResponseEntity.ok("{\"result\":{\"execId\":\"x\"}}");
+            });
+
+        Optional<String> result = clientWithTimeout(Duration.ofMillis(50)).createBatch(new JSONObject());
+
+        assertThat(result).isEmpty();
     }
 }
