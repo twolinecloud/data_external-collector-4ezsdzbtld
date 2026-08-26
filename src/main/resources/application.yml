@@ -65,6 +65,19 @@ management:
     web:
       exposure:
         include: '*'
+  endpoint:
+    health:
+      # 쿠버네티스 livenessProbe/readinessProbe가 각각 /actuator/health/liveness,
+      # /actuator/health/readiness를 보게 하는 스프링 부트 내장 기능 - 클러스터 환경이면
+      # 기본 활성화되지만 로컬 등에서도 동작 확인 가능하게 명시 (2026-08-26).
+      probes:
+        enabled: true
+      group:
+        liveness:
+          # 기본 livenessState에 스케줄러 하트비트(SchedulerHeartbeatHealthIndicator)를
+          # 추가 - 웹서버는 떠있는데 @Scheduled 스레드풀만 조용히 멈추는 상황(2026-08-25
+          # 실측, 9시간 무감지 정지)을 이 프로브가 직접 잡아서 파드 재시작을 유도한다.
+          include: livenessState, schedulerHeartbeat
 
 # 공공데이터 수집 파이프라인 (data-collector 저장소에서 이관됨, private-doc 19번 항목 참고)
 # 소스(오퍼레이션)별 스케줄은 개별 cron으로 관리 (기본값은 PublicDataCollectorScheduler 코드에도 있음, 여기서 오버라이드 가능)
