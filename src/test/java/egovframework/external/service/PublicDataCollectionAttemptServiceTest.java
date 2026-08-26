@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +51,10 @@ class PublicDataCollectionAttemptServiceTest {
 
     private PublicDataCollectionAttemptService service() {
         return new PublicDataCollectionAttemptService(rawStagingStore, collectionAttemptLogStore, meterRegistry);
+    }
+
+    private PublicDataCollectionAttemptService serviceWithTimeout(Duration timeout) {
+        return new PublicDataCollectionAttemptService(rawStagingStore, collectionAttemptLogStore, meterRegistry, timeout);
     }
 
     @Test
@@ -131,5 +136,25 @@ class PublicDataCollectionAttemptServiceTest {
         CollectionAttemptLogDto log = logCaptor.getValue();
         assertThat(log.getStatus()).isEqualTo(AttemptStatus.FAILED.name());
         assertThat(log.getFailureLog()).contains("UNHANDLED EXCEPTION").contains("RuntimeException");
+    }
+
+    @Test
+    void 수집기가_타임아웃보다_오래_걸리면_실패로_기록하고_스케줄러_스레드를_붙잡지_않는다() throws CollectException {
+        when(collector.sourceName()).thenReturn(SOURCE_NAME);
+        when(collector.apiName()).thenReturn(API_NAME);
+        when(collector.key()).thenReturn(COLLECTOR_KEY);
+        when(collector.collect()).thenAnswer(invocation -> {
+            // 실제 운영 타임아웃(180s)을 테스트에서 그대로 기다릴 수 없어, 아주 짧은 타임아웃을
+            // 주입해서(테스트 전용 생성자) 같은 경로를 빠르게 검증한다 - 이 sleep은 워커
+            // 스레드(collectExecutor)에서 도니까 테스트 자체는 타임아웃 시점에 바로 리턴된다.
+            Thread.sleep(500);
+            return List.of("{\"temp\":1}");
+        });
+
+        var result = serviceWithTimeout(Duration.ofMillis(50)).run(collector, ExecutionType.SCHEDULE);
+
+        assertThat(result.status()).isEqualTo(AttemptStatus.FAILED);
+        assertThat(result.failureLog()).contains("타임아웃");
+        verify(rawStagingStore, never()).insert(org.mockito.ArgumentMatchers.any());
     }
 }

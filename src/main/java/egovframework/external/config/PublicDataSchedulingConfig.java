@@ -10,15 +10,20 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 /**
  * 공공데이터 수집 스케줄러(@Scheduled) 활성화 + 스레드풀 구성.
  *
- * <p><b>스레드풀을 10개로 명시한 이유(2026-08-26)</b>: {@code @EnableScheduling}만 붙이면
- * 스프링 기본값인 스레드 1개짜리 풀을 쓰는데, 그 하나뿐인 스레드가 어떤 이유로든(타임아웃
- * 없는 블로킹 호출, DNS 조회 행 등) 멈춰버리면 이 앱의 <b>모든</b> {@code @Scheduled} 메서드가
- * 같이 멈춘다 - 실측(2026-08-25 23:20경, 에러 로그 하나 없이 스케줄러 전체가 9시간 조용히
- * 정지, {@code /actuator/health}는 계속 UP이라 쿠버네티스 헬스체크로도 못 잡음).
- * 풀을 여러 개로 늘려두면 특정 오퍼레이션 하나가 블로킹돼도 나머지(다른 컬렉터/Cleanse/
- * Load/Purge/FacilitySync)는 계속 돈다 - 장애 범위를 줄이는 목적. {@link SchedulerHeartbeat}의
- * 하트비트도 이 풀을 공유해서 돌기 때문에, 풀이 완전히 고갈됐을 때만 진짜로 liveness가
- * DOWN되게 하려는 의도(부분 블로킹은 하트비트가 버텨줌).</p>
+ * <p><b>스레드풀을 10개로 늘린 이유(2026-08-26)</b>: 스레드 1개뿐이면 그 하나가 블로킹
+ * 호출에 걸려 멈출 때(실측 2026-08-25 23:20경, 에러 로그 없이 9시간 정지) 앱의 <b>모든</b>
+ * {@code @Scheduled}가 같이 멈춘다. 풀을 늘려두면 특정 오퍼레이션 하나가 블로킹돼도
+ * 나머지(다른 컬렉터/Cleanse/Load/Purge/FacilitySync)는 계속 돈다.</p>
+ *
+ * <p><b>동시 호출 부작용과 대응</b>: 처음 10개로 늘렸을 때 로그 컬렉터 API 호출이 진짜
+ * 동시에 여러 건 나가면서, 로그 컬렉터 쪽 {@code exec_id} 채번 로직이 동시성에 안전하지
+ * 않아 {@code duplicate key} 충돌로 100% 실패하는 부작용이 있었다 - 그쪽 채번 구조를
+ * 우리가 손댈 수 없어서, 스레드풀을 줄이는 대신 {@code LogCollectorClient}의 실제 HTTP
+ * 호출부를 전용 단일 스레드로 직렬화하는 쪽으로 해결(그 클래스 주석 참고) - 그래서 이
+ * 스레드풀은 10개로 유지. "스레드 하나가 영원히 블로킹되는 상황"은
+ * {@link egovframework.external.service.PublicDataCollectionAttemptService}의 개별 수집
+ * 실행 타임아웃(별도 워커 스레드 + {@code Future.get(timeout)})으로 막고, 그래도 못 막는
+ * 미지의 블로킹은 {@link SchedulerHeartbeat} 기반 liveness가 최후 안전망으로 잡는다.</p>
  */
 @Configuration
 @EnableScheduling
