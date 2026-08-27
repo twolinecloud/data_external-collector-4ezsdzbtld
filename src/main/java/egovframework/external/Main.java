@@ -52,9 +52,13 @@ public class Main {
         return new CorsFilter(source);
     }
 
+    // 2026-08-27: 스켈레톤 컨벤션이 UTC -> Asia/Seoul(KST)로 변경됨 - 그동안 KMA 발표시각/
+    // 로그 컬렉터 타임스탬프 등 곳곳에서 UTC 기본값을 상쇄하려고 명시적으로 붙였던
+    // ZoneId.of("Asia/Seoul") 보정 코드는 전부 제거함(각 클래스 참고). DB 세션 타임존도
+    // application.yml의 spring.datasource.hikari.connection-init-sql로 맞춤.
     @PostConstruct
     void started() {
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Seoul"));
     }
 
 
