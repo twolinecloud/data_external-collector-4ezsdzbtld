@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -41,14 +40,16 @@ public class LogCollectorBatchService {
 
     private static final Logger logger = LogManager.getLogger(LogCollectorBatchService.class);
     private static final DateTimeFormatter DTM = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDateTime.now()가
-    // 실제 한국 시각이 아니게 됨 - 로그 컬렉터 화면에 찍히는 startDtm/endDtm은 KST여야 하므로
-    // 명시적으로 지정해야 함(2026-08-25, PL 요청으로 발견 - KMA 컬렉터들에서 겪었던 것과 동일
-    // 버그 패턴인데 이 클래스는 그때 스코프 밖이었음).
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private static final String JOB_ID = "EXTERNAL_API";
-    private static final String DATA_TYPE_CD = "EXTERNAL";
+    // C01 공통코드(DATA_TYPE_CD)가 EXTERNAL 1종 -> EXTERNAL_PUBLIC/EXTERNAL_LAW 2종으로
+    // 분리됨(2026-08-27, 플랫폼 쪽 tb_comm_code에 이미 반영 확인 - 기존 EXTERNAL은
+    // use_yn='N'으로 비활성화됨). 일단 전부 EXTERNAL_PUBLIC으로 통일 - moleg-criminal-law
+    // (법제처 법령정보)만 EXTERNAL_LAW로 나누는 건 후속 작업. Collect는 operationKey
+    // 기준이라 어렵지 않은데, Cleanse/Load는 오퍼레이션 구분 없이 raw_staging 전체를 한
+    // 배치로 처리하는 구조라 그 안에서 공공데이터/법령정보가 섞일 수 있어 배치 단위로 값
+    // 하나만 넣는 이 필드로는 구분이 애매함 - 그때 다시 설계 필요.
+    private static final String DATA_TYPE_CD = "EXTERNAL_PUBLIC";
     private static final String STEP_COLLECT = "COLLECT";
     private static final String STEP_CLEANSE = "CLEANSE";
     // C05 공통코드 stepTypeCd(COLLECT/CLEANSE/ANALYZE/DEIDENT/STORE/SEND) 중 적재는 STORE에 대응.
@@ -123,7 +124,7 @@ public class LogCollectorBatchService {
         if (!client.isEnabled()) {
             return BatchHandle.inactive();
         }
-        LocalDateTime now = LocalDateTime.now(KST);
+        LocalDateTime now = LocalDateTime.now();
         String startDtm = DTM.format(now);
 
         JSONObject batchBody = new JSONObject()
@@ -156,7 +157,7 @@ public class LogCollectorBatchService {
     }
 
     private void abortBatch(String execId, LocalDateTime startedAt) {
-        String endDtm = DTM.format(LocalDateTime.now(KST));
+        String endDtm = DTM.format(LocalDateTime.now());
         JSONObject body = new JSONObject()
             .put("execStsCd", LogCollectorStatus.FAIL.name())
             .put("endDtm", endDtm)
@@ -171,7 +172,7 @@ public class LogCollectorBatchService {
 
     private void finish(BatchHandle handle, int targetCnt, int successCnt, int failCnt) {
         String status = LogCollectorStatus.aggregate(successCnt, failCnt).name();
-        String endDtm = DTM.format(LocalDateTime.now(KST));
+        String endDtm = DTM.format(LocalDateTime.now());
         long elapsedSec = elapsedSeconds(handle.startedAt());
 
         JSONObject stepFinish = new JSONObject()
@@ -222,6 +223,6 @@ public class LogCollectorBatchService {
     }
 
     private long elapsedSeconds(LocalDateTime startedAt) {
-        return Math.max(0, Duration.between(startedAt, LocalDateTime.now(KST)).getSeconds());
+        return Math.max(0, Duration.between(startedAt, LocalDateTime.now()).getSeconds());
     }
 }

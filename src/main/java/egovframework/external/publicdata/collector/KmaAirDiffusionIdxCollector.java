@@ -3,7 +3,6 @@ package egovframework.external.publicdata.collector;
 import egovframework.external.exception.CollectException;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +47,8 @@ public class KmaAirDiffusionIdxCollector implements PublicDataCollector {
 
     @Override
     public List<String> collect() throws CollectException {
-        String time = LivingWthrIdxTimeSupport.latestIssuedTime(LocalDateTime.now(ZoneId.of("Asia/Seoul")));
+        // Main.java의 JVM 기본 타임존이 Asia/Seoul(KST)라 now()가 곧 한국 시각 (2026-08-27).
+        String time = LivingWthrIdxTimeSupport.latestIssuedTime(LocalDateTime.now());
 
         Map<String, String> params = new LinkedHashMap<>();
         params.put("numOfRows", "10");

@@ -15,7 +15,6 @@ import org.json.JSONObject;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -95,9 +94,9 @@ public class RuleEvaluationService {
         }
         applyWeatherWarnings(latestWarningByStation, regionSourcesByFacility);
 
-        // Main.java가 JVM 기본 타임존을 UTC로 고정해둬서(회사 스켈레톤 컨벤션) LocalDateTime.now()가
-        // 실제 한국 시각이 아니게 됨 - 평가 시점 표시는 한국 시각 기준이어야 해서 명시 필요.
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        // Main.java의 JVM 기본 타임존이 Asia/Seoul(KST)라 now()가 곧 한국 시각(2026-08-27,
+        // 스켈레톤 컨벤션 변경 - 예전엔 UTC 고정이라 여기서 ZoneId.of("Asia/Seoul")를 명시했었음).
+        LocalDateTime now = LocalDateTime.now();
         List<AlertResult> results = new ArrayList<>();
         for (FacilityVulnerability fv : vulnerabilityLoader.all()) {
             WeatherTrigger trigger = WeatherTriggerCalculator.calculate(
