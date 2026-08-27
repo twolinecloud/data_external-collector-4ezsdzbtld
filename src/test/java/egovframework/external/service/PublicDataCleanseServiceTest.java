@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,7 +60,7 @@ class PublicDataCleanseServiceTest {
     @Test
     void COLLECTED_행을_정제기로_정제해서_CLEANSED로_전이시키고_메트릭을_남긴다() throws CleanseException {
         RawStagingDto dto = pendingRow(1L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100))
+        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(cleanser));
@@ -84,7 +85,7 @@ class PublicDataCleanseServiceTest {
     @Test
     void 정제기를_못_찾으면_예외_없이_CLEANSE_FAILED로_남긴다() {
         RawStagingDto dto = pendingRow(2L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100))
+        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.empty());
@@ -106,7 +107,7 @@ class PublicDataCleanseServiceTest {
     @Test
     void 정제기가_CleanseException을_던지면_CLEANSE_FAILED로_남기고_배치는_계속된다() throws CleanseException {
         RawStagingDto dto = pendingRow(3L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100))
+        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(cleanser));
@@ -131,7 +132,7 @@ class PublicDataCleanseServiceTest {
     void findByStatus가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws CleanseException {
         RawStagingDto first = pendingRow(4L);
         RawStagingDto second = pendingRow(5L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100))
+        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
             .thenReturn(List.of(first))
             .thenReturn(List.of(second))
             .thenReturn(List.of());
@@ -142,7 +143,7 @@ class PublicDataCleanseServiceTest {
 
         assertThat(result.totalProcessed()).isEqualTo(2);
         assertThat(result.successCount()).isEqualTo(2);
-        verify(rawStagingStore, times(3)).findByStatus("COLLECTED", 100);
+        verify(rawStagingStore, times(3)).findByStatus("COLLECTED", 100, Set.of(), false);
     }
 
     private RawStagingDto pendingRow(Long id) {

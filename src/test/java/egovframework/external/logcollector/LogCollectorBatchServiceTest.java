@@ -77,6 +77,19 @@ class LogCollectorBatchServiceTest {
     }
 
     @Test
+    void moleg_criminal_law_수집배치는_dataTypeCd가_EXTERNAL_LAW다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
+        when(client.createStep(any(), any())).thenReturn(Optional.of("step1"));
+
+        service().startCollectBatch("moleg-criminal-law", ExecutionType.SCHEDULE, "scheduler:moleg-criminal-law");
+
+        ArgumentCaptor<JSONObject> captor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createBatch(captor.capture());
+        assertThat(captor.getValue().getString("dataTypeCd")).isEqualTo("EXTERNAL_LAW");
+    }
+
+    @Test
     void 수동실행이면_triggerBy와_execTypeCd가_다르게_채워진다() {
         when(client.isEnabled()).thenReturn(true);
         when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
@@ -210,11 +223,12 @@ class LogCollectorBatchServiceTest {
         when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
         when(client.createStep(anyString(), any())).thenReturn(Optional.of("step1"));
 
-        service().startCleanseBatch(ExecutionType.SCHEDULE, "scheduler:cleanse");
+        service().startCleanseBatch(DataTypeClassifier.EXTERNAL_PUBLIC, ExecutionType.SCHEDULE, "scheduler:cleanse");
 
         ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
         verify(client).createBatch(batchCaptor.capture());
-        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 정제");
+        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 정제 (공공데이터)");
+        assertThat(batchCaptor.getValue().getString("dataTypeCd")).isEqualTo("EXTERNAL_PUBLIC");
         assertThat(batchCaptor.getValue().getString("triggerBy")).isEqualTo("scheduler:cleanse");
 
         ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
@@ -223,16 +237,31 @@ class LogCollectorBatchServiceTest {
     }
 
     @Test
+    void cleanse_배치도_EXTERNAL_LAW로_시작할_수_있다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
+        when(client.createStep(anyString(), any())).thenReturn(Optional.of("step1"));
+
+        service().startCleanseBatch(DataTypeClassifier.EXTERNAL_LAW, ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createBatch(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 정제 (법령)");
+        assertThat(batchCaptor.getValue().getString("dataTypeCd")).isEqualTo("EXTERNAL_LAW");
+    }
+
+    @Test
     void load_배치_시작시_jobNm과_stepTypeCd가_STORE로_고정된다() {
         when(client.isEnabled()).thenReturn(true);
         when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
         when(client.createStep(anyString(), any())).thenReturn(Optional.of("step1"));
 
-        service().startLoadBatch(ExecutionType.SCHEDULE, "scheduler:load");
+        service().startLoadBatch(DataTypeClassifier.EXTERNAL_PUBLIC, ExecutionType.SCHEDULE, "scheduler:load");
 
         ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
         verify(client).createBatch(batchCaptor.capture());
-        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 적재");
+        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 적재 (공공데이터)");
+        assertThat(batchCaptor.getValue().getString("dataTypeCd")).isEqualTo("EXTERNAL_PUBLIC");
         assertThat(batchCaptor.getValue().getString("triggerBy")).isEqualTo("scheduler:load");
 
         ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);

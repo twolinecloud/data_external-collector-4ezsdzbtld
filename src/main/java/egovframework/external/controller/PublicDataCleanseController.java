@@ -2,6 +2,7 @@ package egovframework.external.controller;
 
 import egovframework.external.annotation.AdminCallable;
 import egovframework.external.logcollector.BatchHandle;
+import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.CleanseResult;
 import egovframework.external.model.ExecutionType;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 /**
@@ -48,13 +50,21 @@ public class PublicDataCleanseController {
     @PostMapping("/run")
     public Callable<Response<Object>> runManually() {
         return () -> {
-            BatchHandle handle = logCollectorBatchService.startCleanseBatch(
-                ExecutionType.MANUAL, "manual-api:cleanse");
-
-            CleanseResult result = cleanseService.cleanseAllPending();
-
-            logCollectorBatchService.finishCleanseBatch(handle, result);
-            return Response.of(Map.of("processed", result.totalProcessed()));
+            // 스케줄러와 동일하게 EXTERNAL_LAW/EXTERNAL_PUBLIC 배치로 나눠서 보고한다
+            // (2026-08-27, PublicDataCleanseScheduler 참고) - 응답의 processed는 둘의 합계.
+            int lawProcessed = runCategory(DataTypeClassifier.EXTERNAL_LAW, DataTypeClassifier.lawOperationKeys(), false);
+            int publicProcessed = runCategory(DataTypeClassifier.EXTERNAL_PUBLIC, DataTypeClassifier.lawOperationKeys(), true);
+            return Response.of(Map.of("processed", lawProcessed + publicProcessed));
         };
+    }
+
+    private int runCategory(String dataTypeCd, Set<String> lawOperationKeys, boolean exclude) {
+        BatchHandle handle = logCollectorBatchService.startCleanseBatch(
+            dataTypeCd, ExecutionType.MANUAL, "manual-api:cleanse");
+
+        CleanseResult result = cleanseService.cleansePending(lawOperationKeys, exclude);
+
+        logCollectorBatchService.finishCleanseBatch(handle, result);
+        return result.totalProcessed();
     }
 }

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -51,11 +52,20 @@ public class PublicDataCleanseService {
      *         그대로 쓸 수 있다.
      */
     public CleanseResult cleanseAllPending() {
+        return cleansePending(Set.of(), false);
+    }
+
+    /**
+     * operationKey로 걸러서 COLLECTED 상태를 처리 - 로그 컬렉터 배치를 EXTERNAL_PUBLIC/
+     * EXTERNAL_LAW로 나눠 보고하기 위해 도입(2026-08-27, {@code PublicDataCleanseScheduler}
+     * 참고). {@code operationKeys}가 비어있으면 {@link #cleanseAllPending()}과 동일.
+     */
+    public CleanseResult cleansePending(Set<String> operationKeys, boolean exclude) {
         int totalProcessed = 0;
         int successCount = 0;
         int failCount = 0;
         List<RawStagingDto> batch;
-        while (!(batch = rawStagingStore.findByStatus("COLLECTED", BATCH_SIZE)).isEmpty()) {
+        while (!(batch = rawStagingStore.findByStatus("COLLECTED", BATCH_SIZE, operationKeys, exclude)).isEmpty()) {
             for (RawStagingDto dto : batch) {
                 boolean success = cleanseOne(dto);
                 totalProcessed++;
