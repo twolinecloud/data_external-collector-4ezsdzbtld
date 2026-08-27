@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -58,6 +59,15 @@ public class PublicDataLoadService {
      * @return 총/성공/실패 건수 (enabled=false면 전부 0)
      */
     public LoadResult loadAllPending() {
+        return loadPending(Set.of(), false);
+    }
+
+    /**
+     * operationKey로 걸러서 CLEANSED 상태를 처리 - 로그 컬렉터 배치를 EXTERNAL_PUBLIC/
+     * EXTERNAL_LAW로 나눠 보고하기 위해 도입(2026-08-27, {@code PublicDataLoadScheduler}
+     * 참고). {@code operationKeys}가 비어있으면 {@link #loadAllPending()}과 동일.
+     */
+    public LoadResult loadPending(Set<String> operationKeys, boolean exclude) {
         if (!enabled) {
             return new LoadResult(0, 0, 0);
         }
@@ -66,7 +76,7 @@ public class PublicDataLoadService {
         int successCount = 0;
         int failCount = 0;
         List<RawStagingDto> batch;
-        while (!(batch = rawStagingStore.findByStatus("CLEANSED", BATCH_SIZE)).isEmpty()) {
+        while (!(batch = rawStagingStore.findByStatus("CLEANSED", BATCH_SIZE, operationKeys, exclude)).isEmpty()) {
             for (RawStagingDto dto : batch) {
                 boolean success = loadOne(dto);
                 totalProcessed++;

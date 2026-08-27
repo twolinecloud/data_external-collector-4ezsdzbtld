@@ -14,9 +14,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -52,13 +54,13 @@ class PublicDataLoadServiceTest {
         LoadResult result = service(false).loadAllPending();
 
         assertThat(result).isEqualTo(new LoadResult(0, 0, 0));
-        verify(rawStagingStore, never()).findByStatus(any(), anyInt());
+        verify(rawStagingStore, never()).findByStatus(any(), anyInt(), any(), anyBoolean());
     }
 
     @Test
     void CLEANSED_행을_적재기로_적재해서_LOADED로_전이시키고_메트릭을_남긴다() throws LoadException {
         RawStagingDto dto = cleansedRow(1L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100))
+        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
@@ -81,7 +83,7 @@ class PublicDataLoadServiceTest {
     @Test
     void 적재기를_못_찾으면_예외_없이_LOAD_FAILED로_남긴다() {
         RawStagingDto dto = cleansedRow(2L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100))
+        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.empty());
@@ -101,7 +103,7 @@ class PublicDataLoadServiceTest {
     @Test
     void 적재기가_LoadException을_던지면_LOAD_FAILED로_남기고_배치는_계속된다() throws LoadException {
         RawStagingDto dto = cleansedRow(3L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100))
+        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
@@ -117,7 +119,7 @@ class PublicDataLoadServiceTest {
     void findByStatus가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws LoadException {
         RawStagingDto first = cleansedRow(4L);
         RawStagingDto second = cleansedRow(5L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100))
+        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
             .thenReturn(List.of(first))
             .thenReturn(List.of(second))
             .thenReturn(List.of());
@@ -126,7 +128,7 @@ class PublicDataLoadServiceTest {
         LoadResult result = service(true).loadAllPending();
 
         assertThat(result.totalProcessed()).isEqualTo(2);
-        verify(rawStagingStore, times(3)).findByStatus("CLEANSED", 100);
+        verify(rawStagingStore, times(3)).findByStatus("CLEANSED", 100, Set.of(), false);
     }
 
     private RawStagingDto cleansedRow(Long id) {

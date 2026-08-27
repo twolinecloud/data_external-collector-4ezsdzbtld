@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -35,9 +36,10 @@ public class InMemoryRawStagingStore implements RawStagingStore {
     }
 
     @Override
-    public List<RawStagingDto> findByStatus(String status, int limit) {
+    public List<RawStagingDto> findByStatus(String status, int limit, Set<String> operationKeys, boolean exclude) {
         return records.values().stream()
             .filter(r -> status.equals(r.getStatus()))
+            .filter(r -> operationKeys.isEmpty() || (operationKeys.contains(r.getOperationKey()) != exclude))
             .sorted(Comparator.comparing(RawStagingDto::getCollectedAt))
             .limit(limit)
             .collect(Collectors.toList());
