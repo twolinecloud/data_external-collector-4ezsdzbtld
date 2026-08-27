@@ -70,7 +70,7 @@ class LogCollectorBatchServiceTest {
         verify(client).createBatch(captor.capture());
         JSONObject body = captor.getValue();
         assertThat(body.getString("jobId")).isEqualTo("EXTERNAL_API");
-        assertThat(body.getString("dataTypeCd")).isEqualTo("EXTERNAL");
+        assertThat(body.getString("dataTypeCd")).isEqualTo("EXTERNAL_PUBLIC");
         assertThat(body.getString("execTypeCd")).isEqualTo("SCHEDULED"); // 우리 SCHEDULE -> 플랫폼 SCHEDULED
         assertThat(body.getString("jobNm")).isEqualTo("외부연계 수집 - 기상특보목록조회");
         assertThat(body.getString("triggerBy")).isEqualTo("scheduler:kma-weather-warning-list");

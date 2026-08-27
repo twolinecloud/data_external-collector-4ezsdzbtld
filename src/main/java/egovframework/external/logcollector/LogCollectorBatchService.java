@@ -42,7 +42,14 @@ public class LogCollectorBatchService {
     private static final DateTimeFormatter DTM = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private static final String JOB_ID = "EXTERNAL_API";
-    private static final String DATA_TYPE_CD = "EXTERNAL";
+    // C01 공통코드(DATA_TYPE_CD)가 EXTERNAL 1종 -> EXTERNAL_PUBLIC/EXTERNAL_LAW 2종으로
+    // 분리됨(2026-08-27, 플랫폼 쪽 tb_comm_code에 이미 반영 확인 - 기존 EXTERNAL은
+    // use_yn='N'으로 비활성화됨). 일단 전부 EXTERNAL_PUBLIC으로 통일 - moleg-criminal-law
+    // (법제처 법령정보)만 EXTERNAL_LAW로 나누는 건 후속 작업. Collect는 operationKey
+    // 기준이라 어렵지 않은데, Cleanse/Load는 오퍼레이션 구분 없이 raw_staging 전체를 한
+    // 배치로 처리하는 구조라 그 안에서 공공데이터/법령정보가 섞일 수 있어 배치 단위로 값
+    // 하나만 넣는 이 필드로는 구분이 애매함 - 그때 다시 설계 필요.
+    private static final String DATA_TYPE_CD = "EXTERNAL_PUBLIC";
     private static final String STEP_COLLECT = "COLLECT";
     private static final String STEP_CLEANSE = "CLEANSE";
     // C05 공통코드 stepTypeCd(COLLECT/CLEANSE/ANALYZE/DEIDENT/STORE/SEND) 중 적재는 STORE에 대응.
