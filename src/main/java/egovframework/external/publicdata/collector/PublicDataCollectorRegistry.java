@@ -22,8 +22,9 @@ import java.util.stream.Collectors;
  * 인스턴스 - Bean 177개를 등록하는 대신 팩토리 하나로 관리
  * 교정기관이 변경되는 경우 초기설계로는 resource의 csv를 변경하고 서비스를 다시 로딩함으로서 업데이트하도록 함.
  * (hot-reload 아님)
- * (3) {@link MolegLawCollectorFactory}가 형사법령 44건만큼 만들어내는 인스턴스 - 마찬가지로
- * 개별 빈 대신 팩토리로 관리, 법령 추가/제외도 CSV만 고치면 됨(hot-reload 아님, 재기동 필요).
+ * (3) {@link MolegLawCollectorFactory}가 법령/행정규칙 대상 목록(2026-08-28 기준 491건)만큼
+ * 만들어내는 인스턴스 - 마찬가지로 개별 빈 대신 팩토리로 관리, 대상 추가/제외도 CSV만 고치면
+ * 됨(hot-reload 아님, 재기동 필요).
  * (4) {@link LivingWthrIdxCollectorFactory}가 생활기상지수 2개 오퍼레이션 × 16개 시도만큼
  * 만들어내는 인스턴스(2026-08-24 추가) - 동일한 팩토리 관리 원칙.
  * </p>

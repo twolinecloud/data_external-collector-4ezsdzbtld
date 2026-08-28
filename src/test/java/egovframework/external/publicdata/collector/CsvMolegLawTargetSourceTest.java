@@ -14,6 +14,6 @@ class CsvMolegLawTargetSourceTest {
 
         List<MolegLaw> laws = source.current();
 
-        assertThat(laws).hasSize(60);
+        assertThat(laws).hasSize(491);
     }
 }

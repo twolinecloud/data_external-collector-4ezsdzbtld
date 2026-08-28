@@ -21,7 +21,7 @@ class MolegCriminalLawCollectorTest {
     private LawSourcePort lawSourcePort;
 
     private static final MolegLaw CRIMINAL_ACT =
-        new MolegLaw("001692", "형법", "284025", "법률", "20260312", "20260312", "법무부");
+        new MolegLaw("001692", "형법", "284025", "법률", "20260312", "20260312", "법무부", MolegLaw.DOC_TYPE_LAW);
 
     @Test
     void key와_apiName에_법령명과_lawId가_반영된다() {

@@ -24,4 +24,15 @@ public interface LawSourcePort {
      * 없이 개정이 자동 반영된다.</p>
      */
     String fetchLawBody(String sourceName, String apiName, String lawName) throws CollectException;
+
+    /**
+     * 행정규칙명 기준 "현행" (target=admrul) 본문 원문(JSON)을 그대로 반환(2026-08-28 추가).
+     *
+     * <p>{@link #fetchLawBody}와 같은 이유(개정 시 mst 재발급)로 명칭 기준 조회를 쓰지만,
+     * 응답 봉투가 다르다 - 성공 시 최상위 키가 {@code "법령"}이 아니라 {@code "AdmRulService"}
+     * (실 API로 확인, 필드 구성도 다름: 개정문/별표/행정규칙기본정보/조문내용/첨부파일/부칙/
+     * 제개정이유). 그래서 법령과 별도 메서드로 분리했다 - 호출부({@code MolegAdminRuleCollector})가
+     * 어느 조회인지 명확히 구분되고, 어댑터 구현도 응답 검증 로직을 서로 다르게 가져갈 수 있다.</p>
+     */
+    String fetchAdminRuleBody(String sourceName, String apiName, String ruleName) throws CollectException;
 }

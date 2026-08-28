@@ -94,6 +94,41 @@ class DirectLawSourceAdapterTest {
     }
 
     @Test
+    void 행정규칙_성공_응답이면_원문을_그대로_반환한다() throws CollectException {
+        String body = "{\"AdmRulService\":{\"행정규칙기본정보\":{}}}";
+        when(restTemplate.getForObject(any(URI.class), eq(String.class))).thenReturn(body);
+
+        String result = adapter("https://example.invalid", "test").fetchAdminRuleBody("소스", "API", "가석방 업무지침");
+
+        assertThat(result).isEqualTo(body);
+    }
+
+    @Test
+    void 행정규칙_요청_URL에_target이_admrul이다() throws CollectException {
+        when(restTemplate.getForObject(any(URI.class), eq(String.class)))
+            .thenReturn("{\"AdmRulService\":{}}");
+
+        adapter("https://example.invalid", "test-oc").fetchAdminRuleBody("소스", "API", "가석방 업무지침");
+
+        ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(restTemplate).getForObject(uriCaptor.capture(), eq(String.class));
+        assertThat(uriCaptor.getValue().toString())
+            .contains("OC=test-oc")
+            .contains("LM=" + java.net.URLEncoder.encode("가석방 업무지침", java.nio.charset.StandardCharsets.UTF_8))
+            .contains("target=admrul");
+    }
+
+    @Test
+    void AdmRulService_키가_없으면_원문을_담아_CollectException을_던진다() {
+        when(restTemplate.getForObject(any(URI.class), eq(String.class)))
+            .thenReturn("{\"OtherKey\": \"무언가\"}");
+
+        assertThatThrownBy(() -> adapter("https://example.invalid", "test").fetchAdminRuleBody("소스", "API", "존재하지않는행정규칙"))
+            .isInstanceOf(CollectException.class)
+            .hasMessageContaining("행정규칙 조회 실패");
+    }
+
+    @Test
     void 응답이_JSON_형식이_아니면_형식오류_CollectException으로_감싼다() {
         // target=eflaw는 법령명이 전혀 매칭 안 될 때 "Law" 키 JSON 대신 HTML 에러 페이지를
         // 반환하는 경우도 실측 확인됨(2026-08-28) - 이 경로가 그 경우도 커버한다.

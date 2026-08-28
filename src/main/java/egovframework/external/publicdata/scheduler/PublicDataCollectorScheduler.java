@@ -1,6 +1,7 @@
 package egovframework.external.publicdata.scheduler;
 
 import egovframework.external.logcollector.BatchHandle;
+import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
@@ -77,9 +78,13 @@ public class PublicDataCollectorScheduler {
     }
 
     /**
-     * 형사법령 본문조회: 하루 1회, 새벽 5시(부하 적은 시간대) - 60건 전체 순회 수집.
-     * 변경감지/이력누적은 아직 여기서 안 함(admin-db 쓰기 경로 확정 대기, private-doc 31번
-     * 항목) - 지금은 매번 전체를 raw_staging에 새로 적재하기만 함.
+     * 법령/행정규칙 본문조회: 하루 1회, 새벽 5시(부하 적은 시간대) - 대상 목록 전체 순회 수집.
+     * 2026-08-28부터 법령(433건) + 행정규칙(58건, moleg-admin-rule) 총 491건을 이 틱 하나가
+     * 함께 처리한다({@link MolegLawCollectorFactory} 참고) - 둘 다 dataTypeCd가 EXTERNAL_LAW로
+     * 같아서 로그 컬렉터 배치를 나눌 필요가 없다(EXTERNAL_PUBLIC/EXTERNAL_LAW 분리와 달리
+     * 여기선 배치 1개로 충분 - {@link DataTypeClassifier} 참고). 변경감지/이력누적은 아직
+     * 여기서 안 함(admin-db 쓰기 경로 확정 대기, private-doc 31번 항목) - 지금은 매번 전체를
+     * raw_staging에 새로 적재하기만 함.
      */
     @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
     public void collectMolegCriminalLaws() {

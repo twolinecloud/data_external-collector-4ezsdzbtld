@@ -9,18 +9,50 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * classpath:moleg-criminal-laws.csv(형사법령 44건 + 교정 관련 법령 16건 = 60건)가 정상
- * 로딩되는지 검증. 이 목록은 사람이 직접 선정하고 실 API로 lawId/mst까지 검증한 실제 운영
- * 데이터라(private-doc 31/36번 항목 참고), 개수/형식이 깨지면 수집 자체가 안 되므로 기본
- * 무결성을 테스트로 고정해둔다.
+ * classpath:moleg-criminal-laws.csv(형사법령 44건 + 교정 관련 법령 16건 = 60건에서 출발해,
+ * 2026-08-28 여러 출처 교차참조 목록 반영으로 법령 433건 + 행정규칙 58건 = 491건으로 확대)가
+ * 정상 로딩되는지 검증. 이 목록은 사람이 직접 선정하고 실 API로 lawId/mst까지 검증한 실제
+ * 운영 데이터라(private-doc 31/36/39번 항목 참고), 개수/형식이 깨지면 수집 자체가 안 되므로
+ * 기본 무결성을 테스트로 고정해둔다.
  */
 class MolegLawListLoaderTest {
 
     @Test
-    void 형사법령_및_교정법령_60건이_모두_로딩된다() {
+    void 법령_및_행정규칙_491건이_모두_로딩된다() {
         List<MolegLaw> laws = new MolegLawListLoader().all();
 
-        assertThat(laws).hasSize(60);
+        assertThat(laws).hasSize(491);
+    }
+
+    @Test
+    void docType별_건수가_법령_433_행정규칙_58이다() {
+        List<MolegLaw> laws = new MolegLawListLoader().all();
+
+        long lawCount = laws.stream().filter(l -> MolegLaw.DOC_TYPE_LAW.equals(l.docTypeOrDefault())).count();
+        long adminRuleCount = laws.stream().filter(l -> MolegLaw.DOC_TYPE_ADMIN_RULE.equals(l.docTypeOrDefault())).count();
+
+        assertThat(lawCount).isEqualTo(433);
+        assertThat(adminRuleCount).isEqualTo(58);
+    }
+
+    @Test
+    void 쉼표가_포함된_법령명과_공동소관_부처도_그대로_로딩된다() {
+        // 목록 확대 과정에서 발견된 두 quoted-CSV 케이스(2026-08-28) - 값 훼손(치환) 없이
+        // parseCsvLine이 원문 그대로 읽어내는지 확인
+        List<MolegLaw> laws = new MolegLawListLoader().all();
+
+        MolegLaw commaInName = laws.stream()
+            .filter(l -> l.lawId().equals("001170"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(commaInName.lawName())
+            .isEqualTo("재외국민의 가족관계등록 창설, 가족관계등록부 정정 및 가족관계등록부 정리에 관한 특례법");
+
+        MolegLaw commaInMinistry = laws.stream()
+            .filter(l -> l.lawId().equals("001159"))
+            .findFirst()
+            .orElseThrow();
+        assertThat(commaInMinistry.ministry()).isEqualTo("국방부,법무부");
     }
 
     @Test

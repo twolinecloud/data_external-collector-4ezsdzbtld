@@ -43,9 +43,13 @@ public class DbMolegLawTargetSource implements MolegLawTargetSource {
     }
 
     private MolegLaw toMolegLaw(Map<String, Object> row) {
+        // doc_type_cd 컬럼은 아직 tb_ext_law_target에 없음(2026-08-28) - row.get()은 없는 키에
+        // null을 반환하므로 여기선 항상 null이 되고, MolegLaw.docTypeOrDefault()가 LAW로 취급한다.
+        // db 소스로 행정규칙까지 편집하려면 admin-db에 컬럼 추가 + 이 SELECT/맵핑 갱신이 먼저 필요.
         return new MolegLaw(
             str(row.get("lawId")), str(row.get("lawName")), str(row.get("mst")), str(row.get("lawType")),
-            str(row.get("promulgationDate")), str(row.get("effectiveDate")), str(row.get("ministry")));
+            str(row.get("promulgationDate")), str(row.get("effectiveDate")), str(row.get("ministry")),
+            str(row.get("docType")));
     }
 
     private String str(Object o) {
