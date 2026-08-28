@@ -35,7 +35,7 @@ class MolegCriminalLawCollectorTest {
 
     @Test
     void collect는_포트가_반환한_법령본문을_원소_1개짜리_리스트로_반환한다() throws CollectException {
-        when(lawSourcePort.fetchLawBody(any(), any(), eq("284025"))).thenReturn("{\"법령\":{}}");
+        when(lawSourcePort.fetchLawBody(any(), any(), eq("형법"))).thenReturn("{\"법령\":{}}");
         MolegCriminalLawCollector collector = new MolegCriminalLawCollector(lawSourcePort, CRIMINAL_ACT);
 
         List<String> result = collector.collect();
@@ -45,7 +45,7 @@ class MolegCriminalLawCollectorTest {
 
     @Test
     void 포트가_실패하면_그대로_전파된다() throws CollectException {
-        when(lawSourcePort.fetchLawBody(any(), any(), eq("284025")))
+        when(lawSourcePort.fetchLawBody(any(), any(), eq("형법")))
             .thenThrow(new CollectException("소스", "API", "법령 조회 실패"));
         MolegCriminalLawCollector collector = new MolegCriminalLawCollector(lawSourcePort, CRIMINAL_ACT);
 

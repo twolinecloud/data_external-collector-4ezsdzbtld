@@ -44,7 +44,9 @@ public class MolegCriminalLawCollector implements PublicDataCollector {
 
     @Override
     public List<String> collect() throws CollectException {
-        String body = lawSourcePort.fetchLawBody(sourceName(), apiName(), law.mst());
+        // MST(법령일련번호) 대신 법령명으로 조회(2026-08-28, LawSourcePort 참고) - 법령이
+        // 개정돼도 대상 목록의 법령명만 맞으면 코드/설정 변경 없이 최신 버전이 자동 반영된다.
+        String body = lawSourcePort.fetchLawBody(sourceName(), apiName(), law.lawName());
         return List.of(body);
     }
 }
