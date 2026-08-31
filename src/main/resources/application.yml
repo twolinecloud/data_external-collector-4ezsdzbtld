@@ -118,6 +118,12 @@ public-data:
     # FacilityMasterSeeder로 tb_ext_weather_facility(마스터)부터 채워야 FK가 성립한다.
     enabled: ${PUBLIC_DATA_LOAD_ENABLED:false}
     cron: "0 */5 * * * *"
+    # 적재 실패(LOAD_FAILED) 행 재시도 한도 - 2026-08-31 신규.
+    # 매 주기 LOAD_FAILED를 먼저 재시도하고, 이 횟수까지 실패하면 LOAD_ABANDONED로 종결해
+    # 더는 재시도하지 않는다(계속 실패하는 행이 매 주기 재시도 배치를 독점하는 것 방지).
+    # 포기 건수는 public_data_load_abandoned_total 메트릭으로 나감 - 이 값이 오르면
+    # 해당 수집분이 영구 유실됐다는 뜻이라 알람 대상.
+    max-attempts: ${PUBLIC_DATA_LOAD_MAX_ATTEMPTS:3}
   purge:
     # admin-db 보존기간 초과 데이터 자동 폐기 - 2026-08-24 신규, task-spec.md 11번 항목
     # ("비식별화(저장)/전송 데이터는 실행일시로부터 1개월만 노출, 이후 폐기") 요구사항 구현.

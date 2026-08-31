@@ -54,6 +54,37 @@ class InMemoryRawStagingStoreTest {
     }
 
     @Test
+    void 적재_실패는_시도_횟수를_1씩_올리고_LOAD_FAILED로_남긴다() {
+        RawStagingDto dto = dto("safetydata-disaster-msg-list");
+        store.insert(dto);
+
+        store.markLoadFailed(dto.getId(), "컬럼 길이 초과");
+        assertThat(dto.getStatus()).isEqualTo("LOAD_FAILED");
+        assertThat(dto.getLoadAttemptCount()).isEqualTo(1);
+
+        store.markLoadFailed(dto.getId(), "또 실패");
+        assertThat(dto.getLoadAttemptCount()).isEqualTo(2);
+        assertThat(dto.getLoadFailureLog()).isEqualTo("또 실패");
+    }
+
+    @Test
+    void 포기한_행은_LOAD_ABANDONED가_되어_재시도_조회에서_빠진다() {
+        RawStagingDto dto = dto("safetydata-disaster-msg-list");
+        store.insert(dto);
+        store.markLoadFailed(dto.getId(), "1차 실패");
+
+        assertThat(store.findByStatus("LOAD_FAILED", 100, Set.of(), false)).hasSize(1);
+
+        store.markLoadAbandoned(dto.getId(), "한도 소진");
+
+        // 상태값을 분리한 목적 - 조회에서 자연스럽게 빠져야 적재 루프가 같은 행을 계속
+        // 붙들지 않는다(RawStagingStore#markLoadAbandoned 주석 참고).
+        assertThat(store.findByStatus("LOAD_FAILED", 100, Set.of(), false)).isEmpty();
+        assertThat(dto.getStatus()).isEqualTo("LOAD_ABANDONED");
+        assertThat(dto.getLoadAttemptCount()).isEqualTo(2);
+    }
+
+    @Test
     void 상태가_다르면_필터와_무관하게_제외된다() {
         RawStagingDto dto = dto("moleg-criminal-law");
         store.insert(dto);

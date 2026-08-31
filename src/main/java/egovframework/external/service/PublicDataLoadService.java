@@ -28,6 +28,12 @@ import java.util.concurrent.TimeUnit;
  * <p>{@code public-data.load.enabled=false}(기본값)면 raw_staging을 아예 건드리지 않고
  * 바로 빈 결과를 반환한다 - 스케줄/수동 트리거 어느 경로로 호출되든 이 가드 하나로 전부
  * 막힌다(꺼진 상태에서 CLEANSED 행이 "로더 없음"으로 잘못 LOAD_FAILED 처리되는 것 방지).</p>
+ *
+ * <p><b>실패 행 재시도(2026-08-31)</b>: 예전엔 CLEANSED만 조회해서, 한 번 LOAD_FAILED가 된
+ * 행은 두 번 다시 쳐다보지 않았다. {@code raw_staging}이 인메모리라 그 행은 재시도 경로 없이
+ * 그대로 소멸했고, 재난문자처럼 "당일만 조회 가능한" API는 자정을 넘기면 영구 유실이었다
+ * (cleanse-db-schema-spec.md §4.1-A). 이제 매 주기 LOAD_FAILED를 먼저 재시도하고,
+ * {@code max-attempts}회까지 실패하면 LOAD_ABANDONED로 종결시킨다.</p>
  */
 @Service
 public class PublicDataLoadService {
@@ -40,17 +46,20 @@ public class PublicDataLoadService {
     private final PublicDataLoaderRegistry loaderRegistry;
     private final MeterRegistry meterRegistry;
     private final boolean enabled;
+    private final int maxAttempts;
 
     public PublicDataLoadService(
         RawStagingStore rawStagingStore,
         PublicDataLoaderRegistry loaderRegistry,
         MeterRegistry meterRegistry,
-        @Value("${public-data.load.enabled:false}") boolean enabled
+        @Value("${public-data.load.enabled:false}") boolean enabled,
+        @Value("${public-data.load.max-attempts:3}") int maxAttempts
     ) {
         this.rawStagingStore = rawStagingStore;
         this.loaderRegistry = loaderRegistry;
         this.meterRegistry = meterRegistry;
         this.enabled = enabled;
+        this.maxAttempts = maxAttempts;
     }
 
     /**
@@ -72,22 +81,42 @@ public class PublicDataLoadService {
             return new LoadResult(0, 0, 0);
         }
 
-        int totalProcessed = 0;
-        int successCount = 0;
-        int failCount = 0;
+        Tally tally = new Tally();
+
+        // 1) 지난 주기에 실패한 행 재시도. 여기서는 소진될 때까지 반복하지 않는다 - 재시도가
+        //    또 실패하면 그 행이 다시 LOAD_FAILED가 되어 같은 조회에 즉시 다시 잡히므로
+        //    호출 하나가 무한루프에 빠진다(RawStagingStore#findByStatus 주석의 경고와 같은
+        //    상황). 한 주기에 최대 BATCH_SIZE건만 재시도하고 나머지는 다음 주기로 넘긴다.
+        for (RawStagingDto dto : rawStagingStore.findByStatus("LOAD_FAILED", BATCH_SIZE, operationKeys, exclude)) {
+            tally.add(loadOne(dto));
+        }
+
+        // 2) 신규 CLEANSED 행. 실패하면 LOAD_FAILED로 빠져나가 이 조회에 다시 안 걸리므로
+        //    (1)과 달리 소진될 때까지 반복해도 안전하다. 이번 주기에 실패한 행은 (1)이 이미
+        //    지나갔으니 다음 주기부터 재시도된다 - 일시적 장애에 시간 여유를 주는 효과.
         List<RawStagingDto> batch;
         while (!(batch = rawStagingStore.findByStatus("CLEANSED", BATCH_SIZE, operationKeys, exclude)).isEmpty()) {
             for (RawStagingDto dto : batch) {
-                boolean success = loadOne(dto);
-                totalProcessed++;
-                if (success) {
-                    successCount++;
-                } else {
-                    failCount++;
-                }
+                tally.add(loadOne(dto));
             }
         }
-        return new LoadResult(totalProcessed, successCount, failCount);
+        return new LoadResult(tally.total, tally.success, tally.fail);
+    }
+
+    /** loadPending의 두 단계가 같은 집계를 공유하기 위한 카운터. */
+    private static final class Tally {
+        private int total;
+        private int success;
+        private int fail;
+
+        void add(boolean succeeded) {
+            total++;
+            if (succeeded) {
+                success++;
+            } else {
+                fail++;
+            }
+        }
     }
 
     /** @return 적재 성공 여부 */
@@ -121,15 +150,37 @@ public class PublicDataLoadService {
 
     private void fail(RawStagingDto dto, Timer.Sample sample, String operationKey, String message, Throwable cause) {
         long tookMs = stopTimer(sample, operationKey);
-        rawStagingStore.markLoadFailed(dto.getId(), message);
+        int attempt = dto.getLoadAttemptCount() + 1;
+        boolean abandoned = attempt >= maxAttempts;
+
+        if (abandoned) {
+            rawStagingStore.markLoadAbandoned(dto.getId(), message);
+            recordAbandoned(operationKey);
+        } else {
+            rawStagingStore.markLoadFailed(dto.getId(), message);
+        }
+        // status 태그는 기존 대시보드가 쓰던 값(SUCCESS/FAILED)을 그대로 유지하고, 포기는
+        // 별도 카운터로 뺀다 - "영구 유실"은 단순 실패와 알람 기준이 달라야 하기 때문.
         recordAttempt(operationKey, "FAILED");
+
+        String detail = message + " [시도 " + attempt + "/" + maxAttempts + ", "
+            + (abandoned ? "재시도 한도 소진 - 이 행은 포기함" : "다음 주기에 재시도") + "]"
+            + " (" + tookMs + "ms)";
         if (cause != null) {
             PipelineLogUtils.error(logger, STAGE, dto.getSourceName(), dto.getApiName(),
-                "raw_staging id=" + dto.getId() + " - " + message + " (" + tookMs + "ms)", cause);
+                "raw_staging id=" + dto.getId() + " - " + detail, cause);
         } else {
             PipelineLogUtils.warn(logger, STAGE, dto.getSourceName(), dto.getApiName(),
-                "raw_staging id=" + dto.getId() + " - " + message + " (" + tookMs + "ms)");
+                "raw_staging id=" + dto.getId() + " - " + detail);
         }
+    }
+
+    private void recordAbandoned(String operationKey) {
+        Counter.builder("public_data_load_abandoned_total")
+            .description("재시도 한도를 소진해 적재를 포기한 raw_staging 건수 (데이터 영구 유실)")
+            .tag("operationKey", operationKey == null ? "unknown" : operationKey)
+            .register(meterRegistry)
+            .increment();
     }
 
     private long stopTimer(Timer.Sample sample, String operationKey) {

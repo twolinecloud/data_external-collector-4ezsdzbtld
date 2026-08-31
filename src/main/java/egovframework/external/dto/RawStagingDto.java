@@ -12,7 +12,13 @@ import java.time.LocalDateTime;
  *
  * <p>수집→정제→적재 재처리 체크포인트. {@code status} 값은
  * COLLECTED -&gt; CLEANSED -&gt; LOADED 순으로 전이하며, 실패 시
- * CLEANSE_FAILED / LOAD_FAILED 로 남아 다음 배치 실행에서 재시도 대상이 된다.</p>
+ * CLEANSE_FAILED / LOAD_FAILED 로 남는다.</p>
+ *
+ * <p>LOAD_FAILED는 다음 적재 주기에서 재시도 대상이 되고({@code PublicDataLoadService}),
+ * {@code public-data.load.max-attempts}회까지 실패하면 LOAD_ABANDONED로 전이해 더는
+ * 재시도하지 않는다 - 계속 실패하는 행이 매 주기 재시도를 독점하는 것을 막기 위함.
+ * (CLEANSE_FAILED 재시도는 아직 없음 - 이 주석이 예전엔 "재시도 대상이 된다"고 했지만
+ * 실제로는 구현이 없던 상태였고, 2026-08-31에 적재 쪽만 실제 구현하며 문구를 맞춤)</p>
  */
 @Data
 @Builder
@@ -39,6 +45,8 @@ public class RawStagingDto {
     String cleansedPayload;
     String cleanseFailureLog;
     String loadFailureLog;
+    /** 적재 시도 횟수 - 실패할 때마다 1씩 증가. max-attempts에 도달하면 LOAD_ABANDONED. */
+    int loadAttemptCount;
     String processedBatchId;
     LocalDateTime collectedAt;
     LocalDateTime cleansedAt;

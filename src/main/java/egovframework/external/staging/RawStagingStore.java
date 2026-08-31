@@ -47,6 +47,21 @@ public interface RawStagingStore {
     /** 적재 성공: status=LOADED. */
     void markLoaded(Long id);
 
-    /** 적재 실패: status=LOAD_FAILED, 실패사유 기록. */
+    /**
+     * 적재 실패: status=LOAD_FAILED, 실패사유 기록, 시도 횟수 +1.
+     *
+     * <p>LOAD_FAILED 행은 다음 적재 주기에서 재시도된다({@code PublicDataLoadService}).
+     * 재시도 한도까지 실패하면 호출 측이 {@link #markLoadAbandoned}로 종결시킨다.</p>
+     */
     void markLoadFailed(Long id, String failureLog);
+
+    /**
+     * 적재 재시도 한도 소진: status=LOAD_ABANDONED, 실패사유 기록, 시도 횟수 +1.
+     *
+     * <p>LOAD_FAILED와 <b>다른 상태값을 쓰는 게 핵심</b> - 같은 상태로 두면
+     * {@link #findByStatus}가 이 행을 계속 반환해서 적재 루프가 영원히 같은 행만 붙들게
+     * 된다(그 메서드 주석의 무한루프 경고와 같은 이유). 상태를 분리해야 조회에서
+     * 자연스럽게 빠진다.</p>
+     */
+    void markLoadAbandoned(Long id, String failureLog);
 }

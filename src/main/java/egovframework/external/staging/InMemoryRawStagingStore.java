@@ -77,6 +77,16 @@ public class InMemoryRawStagingStore implements RawStagingStore {
         update(id, dto -> {
             dto.setStatus("LOAD_FAILED");
             dto.setLoadFailureLog(failureLog);
+            dto.setLoadAttemptCount(dto.getLoadAttemptCount() + 1);
+        });
+    }
+
+    @Override
+    public void markLoadAbandoned(Long id, String failureLog) {
+        update(id, dto -> {
+            dto.setStatus("LOAD_ABANDONED");
+            dto.setLoadFailureLog(failureLog);
+            dto.setLoadAttemptCount(dto.getLoadAttemptCount() + 1);
         });
     }
 
