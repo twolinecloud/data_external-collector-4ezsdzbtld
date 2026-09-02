@@ -16,6 +16,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,6 +95,42 @@ class PublicDataCollectionAttemptServiceTest {
         assertThat(meterRegistry.get("public_data_collect_duration_seconds")
             .tag("collectorKey", COLLECTOR_KEY)
             .timer().count()).isEqualTo(1L);
+    }
+
+    @Test
+    void 유효기간을_밝힌_수집기는_오늘_날짜로_계산한_만료시각이_붙는다() throws CollectException {
+        when(collector.sourceName()).thenReturn(SOURCE_NAME);
+        when(collector.apiName()).thenReturn(API_NAME);
+        when(collector.key()).thenReturn(COLLECTOR_KEY);
+        when(collector.operationKey()).thenReturn(OPERATION_KEY);
+        when(collector.collect()).thenReturn(List.of("{\"temp\":1}"));
+        // 수집 시각이 아니라 수집 날짜를 넘겨야 한다 - 자정 경계로 판단하는 소스가 있기 때문.
+        when(collector.stagingExpiresAt(LocalDate.now()))
+            .thenReturn(LocalDate.now().plusDays(2).atStartOfDay());
+
+        service().run(collector, ExecutionType.SCHEDULE);
+
+        ArgumentCaptor<RawStagingDto> rawCaptor = ArgumentCaptor.forClass(RawStagingDto.class);
+        verify(rawStagingStore, times(1)).insert(rawCaptor.capture());
+        assertThat(rawCaptor.getValue().getExpiresAt())
+            .isEqualTo(LocalDate.now().plusDays(2).atStartOfDay());
+    }
+
+    @Test
+    void 유효기간을_안_밝힌_수집기는_만료시각_없이_저장된다() throws CollectException {
+        when(collector.sourceName()).thenReturn(SOURCE_NAME);
+        when(collector.apiName()).thenReturn(API_NAME);
+        when(collector.key()).thenReturn(COLLECTOR_KEY);
+        when(collector.operationKey()).thenReturn(OPERATION_KEY);
+        when(collector.collect()).thenReturn(List.of("{\"temp\":1}"));
+        when(collector.stagingExpiresAt(LocalDate.now())).thenReturn(null);
+
+        service().run(collector, ExecutionType.SCHEDULE);
+
+        ArgumentCaptor<RawStagingDto> rawCaptor = ArgumentCaptor.forClass(RawStagingDto.class);
+        verify(rawStagingStore, times(1)).insert(rawCaptor.capture());
+        // 법령/재난문자가 이 경우 - 기한 없이 남아 적재 재시도를 계속 받는다.
+        assertThat(rawCaptor.getValue().getExpiresAt()).isNull();
     }
 
     @Test

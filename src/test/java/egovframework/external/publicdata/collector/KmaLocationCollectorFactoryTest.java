@@ -3,6 +3,8 @@ package egovframework.external.publicdata.collector;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -30,6 +32,18 @@ class KmaLocationCollectorFactoryTest {
     @Test
     void 전체_목록은_3개_오퍼레이션을_합친_177개다() {
         assertThat(factory.allLocationBasedCollectors()).hasSize(59 * 3);
+    }
+
+    @Test
+    void 기상_컬렉터의_staging_유효기간은_날짜_기준_자정_경계다() {
+        LocalDate 수집일 = LocalDate.of(2026, 9, 1);
+
+        for (PublicDataCollector collector : factory.allLocationBasedCollectors()) {
+            // 오늘이 9/2일 때 9/1 00:00 이후 수집분은 적재 실패해도 재시도 대기로 남아야 하고,
+            // 8/31 이하만 폐기 대상이다 - 그러려면 9/1 수집분의 만료가 9/3 00:00이어야 한다.
+            assertThat(collector.stagingExpiresAt(수집일))
+                .isEqualTo(LocalDateTime.of(2026, 9, 3, 0, 0));
+        }
     }
 
     @Test

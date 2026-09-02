@@ -19,6 +19,8 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -93,7 +95,7 @@ class PublicDataLoadServiceTest {
     }
 
     @Test
-    void 적재기를_못_찾으면_예외_없이_LOAD_FAILED로_남긴다() {
+    void 적재기를_못_찾으면_실패가_아니라_LOAD_SKIPPED로_종결한다() {
         noRetryBacklog();
         RawStagingDto dto = cleansedRow(2L);
         when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
@@ -103,14 +105,19 @@ class PublicDataLoadServiceTest {
 
         LoadResult result = service(true).loadAllPending();
 
-        assertThat(result.totalProcessed()).isEqualTo(1);
-        assertThat(result.failCount()).isEqualTo(1);
-        verify(rawStagingStore).markLoadFailed(eq(2L), org.mockito.ArgumentMatchers.contains("적재기 없음"));
+        // 적재 대상이 아닌 행은 이 단계가 한 일이 없으므로 배치 집계에 잡히지 않는다 -
+        // 실패로 세면 법제처 배치가 매일 수백 건 실패로 보고된다.
+        assertThat(result.totalProcessed()).isZero();
+        assertThat(result.failCount()).isZero();
+        verify(rawStagingStore).markLoadSkipped(eq(2L), org.mockito.ArgumentMatchers.contains("적재기 없음"));
+        verify(rawStagingStore, never()).markLoadFailed(anyLong(), anyString());
 
-        assertThat(meterRegistry.get("public_data_load_attempts_total")
+        assertThat(meterRegistry.get("public_data_load_skipped_total")
             .tag("operationKey", OPERATION_KEY)
-            .tag("status", "FAILED")
             .counter().count()).isEqualTo(1.0);
+        // "영구 유실" 알람과 실패 카운터는 건드리지 않아야 한다.
+        assertThat(meterRegistry.find("public_data_load_abandoned_total").counter()).isNull();
+        assertThat(meterRegistry.find("public_data_load_attempts_total").counter()).isNull();
     }
 
     @Test

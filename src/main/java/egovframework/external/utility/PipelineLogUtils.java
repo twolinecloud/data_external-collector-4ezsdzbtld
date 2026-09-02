@@ -11,6 +11,10 @@ import org.apache.logging.log4j.Logger;
  */
 public class PipelineLogUtils {
 
+    public static void debug(Logger logger, String stage, String source, String api, String message) {
+        logger.debug("[{}] source={} api={} - {}", stage, source, api, message);
+    }
+
     public static void info(Logger logger, String stage, String source, String api, String message) {
         logger.info("[{}] source={} api={} - {}", stage, source, api, message);
     }

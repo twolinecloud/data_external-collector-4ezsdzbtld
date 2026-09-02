@@ -17,7 +17,19 @@ import java.util.Set;
  */
 public interface RawStagingStore {
 
-    /** COLLECTED 상태로 신규 레코드 저장. dto.id 에 생성된 식별자가 채워진다. */
+    /**
+     * COLLECTED 상태로 신규 레코드 저장. dto.id 에 생성된 식별자가 채워진다.
+     *
+     * <p><b>구현체 계약(2026-09-02)</b>: 같은 {@code collectorKey}의 <b>종결된</b> 행
+     * (LOADED / LOAD_ABANDONED / CLEANSE_FAILED)은 이 시점에 회수해야 한다 - 수집 단위
+     * 하나가 staging에 무한정 쌓이지 않게 하는 유일한 지점이다. 아직 처리 중인 행
+     * (COLLECTED / CLEANSED / LOAD_FAILED)은 회수하면 안 된다(적재 지연 중 유실 방지).
+     * 근거와 수집 케이스별 결과는 {@link InMemoryRawStagingStore#insert} 주석 참고.</p>
+     *
+     * <p>같이, {@link RawStagingDto#expiresAt}이 지난 행은 collectorKey/상태를 가리지 않고
+     * 폐기해야 한다 - 회수 규칙은 다음 수집이 들어와야 돌기 때문에 적재가 오래 막히거나 수집이
+     * 끊긴 소스의 행은 그것만으로 정리되지 않는다.</p>
+     */
     void insert(RawStagingDto dto);
 
     /** 특정 상태의 레코드를 오래된 순으로 최대 limit 건 조회 (정제/적재 단계가 작업 대상을 가져올 때 사용). */
@@ -46,6 +58,17 @@ public interface RawStagingStore {
 
     /** 적재 성공: status=LOADED. */
     void markLoaded(Long id);
+
+    /**
+     * 적재 대상이 아님: status=LOAD_SKIPPED, 사유 기록. 시도 횟수는 올리지 않는다.
+     *
+     * <p>등록된 적재기가 없는 operationKey가 여기 해당한다 - 아직 적재까지 합의되지 않은
+     * 채널(2026-09-02 기준 법제처)이 그렇다. <b>실패가 아니다</b>: 재시도해도 달라질 게 없고,
+     * 이 행이 사라지는 건 유실이 아니라 예정된 동작이라 LOAD_FAILED/LOAD_ABANDONED와는
+     * 구분해야 한다. 같은 상태로 두면 실패 카운터와 "영구 유실" 알람이 상시 올라
+     * 진짜 유실을 덮는다.</p>
+     */
+    void markLoadSkipped(Long id, String reason);
 
     /**
      * 적재 실패: status=LOAD_FAILED, 실패사유 기록, 시도 횟수 +1.

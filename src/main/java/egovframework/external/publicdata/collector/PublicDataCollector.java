@@ -2,6 +2,8 @@ package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -41,6 +43,23 @@ public interface PublicDataCollector {
 
     /** 이 컬렉터가 특정 지역(교정기관) 전용이면 그 {@code facilityId}, 아니면 {@code null}. */
     default String facilityId() {
+        return null;
+    }
+
+    /**
+     * {@code collectedOn}에 수집한 분이 raw_staging에서 유효한 마지막 시각.
+     * {@code null}(기본값)이면 기한 없음.
+     *
+     * <p>수집 단위가 반복되는 소스는 {@code InMemoryRawStagingStore#insert}의 종결 행 회수만으로
+     * 충분하지만, 그건 <b>다음 수집이 실제로 들어와야</b> 동작한다. 적재가 오래 막혀 있으면 미적재
+     * 행(COLLECTED/CLEANSED/LOAD_FAILED)은 회수 대상이 아니라서 계속 남는데, 데이터 자체에
+     * 유효기간이 있는 소스라면 그렇게 붙들고 있어도 쓸모가 없다. 그런 소스가 여기에 기한을 밝힌다.</p>
+     *
+     * <p>기상 실황/예보가 그 경우다. 판단 기준은 수집 시각으로부터 몇 시간이 아니라 <b>날짜</b>이므로
+     * (2026-09-02, 사용자 확인) 구현체는 자정 경계를 돌려준다. 반대로 법령은 내용이 오래 유효하고,
+     * 재난문자는 적재 재시도가 생명이라 둘 다 기한을 두지 않는다.</p>
+     */
+    default LocalDateTime stagingExpiresAt(LocalDate collectedOn) {
         return null;
     }
 }

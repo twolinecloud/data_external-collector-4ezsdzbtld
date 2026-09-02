@@ -22,12 +22,13 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * raw_staging의 CLEANSED 행을 꺼내 알맞은 {@link PublicDataLoader}로 admin-db 최종 테이블에
- * upsert해서 LOADED/LOAD_FAILED로 전이시키는 오케스트레이션. {@code PublicDataCleanseService}와
+ * upsert해서 LOADED/LOAD_FAILED로 전이시키는 오케스트레이션. 적재기가 등록되지 않은
+ * operationKey는 LOAD_SKIPPED로 종결한다({@link #skip}). {@code PublicDataCleanseService}와
  * 대칭 구조.
  *
  * <p>{@code public-data.load.enabled=false}(기본값)면 raw_staging을 아예 건드리지 않고
  * 바로 빈 결과를 반환한다 - 스케줄/수동 트리거 어느 경로로 호출되든 이 가드 하나로 전부
- * 막힌다(꺼진 상태에서 CLEANSED 행이 "로더 없음"으로 잘못 LOAD_FAILED 처리되는 것 방지).</p>
+ * 막힌다(적재를 꺼둔 동안 CLEANSED 행이 "로더 없음"으로 종결 처리돼 버리는 것 방지).</p>
  *
  * <p><b>실패 행 재시도(2026-08-31)</b>: 예전엔 CLEANSED만 조회해서, 한 번 LOAD_FAILED가 된
  * 행은 두 번 다시 쳐다보지 않았다. {@code raw_staging}이 인메모리라 그 행은 재시도 경로 없이
@@ -109,9 +110,14 @@ public class PublicDataLoadService {
         private int success;
         private int fail;
 
-        void add(boolean succeeded) {
+        void add(Outcome outcome) {
+            // 적재 대상이 아닌 행은 이 단계가 한 일이 없으므로 배치 집계에서 아예 뺀다 -
+            // 실패로 세면 로그 컬렉터 배치가 매일 실패 수백 건으로 보고된다.
+            if (outcome == Outcome.SKIPPED) {
+                return;
+            }
             total++;
-            if (succeeded) {
+            if (outcome == Outcome.SUCCESS) {
                 success++;
             } else {
                 fail++;
@@ -119,18 +125,16 @@ public class PublicDataLoadService {
         }
     }
 
-    /** @return 적재 성공 여부 */
-    private boolean loadOne(RawStagingDto dto) {
+    private Outcome loadOne(RawStagingDto dto) {
         String operationKey = dto.getOperationKey();
-        Timer.Sample sample = Timer.start(meterRegistry);
 
         Optional<PublicDataLoader> loader = loaderRegistry.find(operationKey);
         if (loader.isEmpty()) {
-            String message = "적재기 없음: operationKey=" + operationKey;
-            fail(dto, sample, operationKey, message, null);
-            return false;
+            skip(dto, operationKey);
+            return Outcome.SKIPPED;
         }
 
+        Timer.Sample sample = Timer.start(meterRegistry);
         try {
             loader.get().load(dto);
             long tookMs = stopTimer(sample, operationKey);
@@ -138,15 +142,39 @@ public class PublicDataLoadService {
             recordAttempt(operationKey, "SUCCESS");
             PipelineLogUtils.info(logger, STAGE, dto.getSourceName(), dto.getApiName(),
                 "raw_staging id=" + dto.getId() + " 적재 완료 (" + tookMs + "ms)");
-            return true;
+            return Outcome.SUCCESS;
         } catch (LoadException e) {
             fail(dto, sample, operationKey, e.getMessage(), e);
-            return false;
+            return Outcome.FAILED;
         } catch (Exception e) {
             fail(dto, sample, operationKey, "UNHANDLED EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage(), e);
-            return false;
+            return Outcome.FAILED;
         }
     }
+
+    /**
+     * 적재기가 없는 operationKey - <b>실패가 아니라 "아직 적재 대상이 아님"</b>이다.
+     *
+     * <p>2026-09-02 기준 법제처(moleg-*)가 여기 해당한다. 적재까지는 아직 합의되지 않은
+     * 채널이라 수집·정제만 하고 끝나며, 이 행이 회수되어 사라지는 것도 유실이 아니다.
+     * 그래서 시도 카운터/타이머를 건드리지 않고, "영구 유실" 알람인
+     * {@code public_data_load_abandoned_total}도 올리지 않는다 - 상시 올라가면 진짜 유실을
+     * 덮는다. 대신 별도 카운터로만 세고 LOAD_SKIPPED(종결)로 남겨, 다음 수집 때
+     * {@code RawStagingStore#insert}가 회수할 수 있게 한다.</p>
+     */
+    private void skip(RawStagingDto dto, String operationKey) {
+        rawStagingStore.markLoadSkipped(dto.getId(), "적재기 없음: operationKey=" + operationKey);
+        Counter.builder("public_data_load_skipped_total")
+            .description("등록된 적재기가 없어 적재하지 않고 종결한 raw_staging 건수 (실패 아님)")
+            .tag("operationKey", operationKey == null ? "unknown" : operationKey)
+            .register(meterRegistry)
+            .increment();
+        // 건당 로그는 debug - 법제처만 하루 약 491건이라 info로 두면 운영 로그를 덮는다.
+        PipelineLogUtils.debug(logger, STAGE, dto.getSourceName(), dto.getApiName(),
+            "raw_staging id=" + dto.getId() + " 적재 대상 아님 - 적재기 없음(operationKey=" + operationKey + ")");
+    }
+
+    private enum Outcome { SUCCESS, FAILED, SKIPPED }
 
     private void fail(RawStagingDto dto, Timer.Sample sample, String operationKey, String message, Throwable cause) {
         long tookMs = stopTimer(sample, operationKey);

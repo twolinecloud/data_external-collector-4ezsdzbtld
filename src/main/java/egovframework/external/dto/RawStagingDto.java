@@ -14,6 +14,9 @@ import java.time.LocalDateTime;
  * COLLECTED -&gt; CLEANSED -&gt; LOADED 순으로 전이하며, 실패 시
  * CLEANSE_FAILED / LOAD_FAILED 로 남는다.</p>
  *
+ * <p>등록된 적재기가 없는 operationKey는 LOAD_SKIPPED로 종결한다 - 실패가 아니라 "아직 적재
+ * 대상이 아님"이고, 이 행이 사라지는 건 유실이 아니다(2026-09-02).</p>
+ *
  * <p>LOAD_FAILED는 다음 적재 주기에서 재시도 대상이 되고({@code PublicDataLoadService}),
  * {@code public-data.load.max-attempts}회까지 실패하면 LOAD_ABANDONED로 전이해 더는
  * 재시도하지 않는다 - 계속 실패하는 행이 매 주기 재시도를 독점하는 것을 막기 위함.
@@ -44,10 +47,18 @@ public class RawStagingDto {
     String status;
     String cleansedPayload;
     String cleanseFailureLog;
+    /** 적재 실패 사유. LOAD_SKIPPED일 때는 실패가 아니라 <b>건너뛴 사유</b>가 들어간다. */
     String loadFailureLog;
     /** 적재 시도 횟수 - 실패할 때마다 1씩 증가. max-attempts에 도달하면 LOAD_ABANDONED. */
     int loadAttemptCount;
     String processedBatchId;
+    /**
+     * 이 행을 더 붙들고 있을 이유가 없어지는 시각 ({@code PublicDataCollector.stagingExpiresAt}).
+     * {@code null}이면 기한 없음 - 법령/재난문자처럼 기한을 두지 않는 소스가 그렇다.
+     * 기한이 지난 행은 상태와 무관하게 {@code RawStagingStore#insert} 시점에 폐기된다.
+     * 기상청 6종은 날짜 기준이라 자정 경계가 들어간다(수집일 D면 D+2일 0시).
+     */
+    LocalDateTime expiresAt;
     LocalDateTime collectedAt;
     LocalDateTime cleansedAt;
     LocalDateTime loadedAt;

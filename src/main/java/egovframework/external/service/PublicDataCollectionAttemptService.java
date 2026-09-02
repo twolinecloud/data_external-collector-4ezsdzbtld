@@ -20,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -145,6 +147,7 @@ public class PublicDataCollectionAttemptService {
                 .facilityId(collector.facilityId())
                 .collectorKey(collectorKey)
                 .rawPayload(combinedPayload)
+                .expiresAt(expiresAt(collector))
                 .build();
             rawStagingStore.insert(dto);
         }
@@ -154,6 +157,15 @@ public class PublicDataCollectionAttemptService {
             "collected " + rawPayloads.size() + " record(s) in " + tookMs + "ms");
         logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null, collectorKey);
         return new CollectResult(collectorKey, sourceName, apiName, AttemptStatus.SUCCESS, rawPayloads.size(), null);
+    }
+
+    /**
+     * 유효기간을 밝힌 수집기(현재 기상청 6종)만 만료 시각이 붙는다 -
+     * {@link PublicDataCollector#stagingExpiresAt(LocalDate)}. 기준이 수집 시각이 아니라
+     * 수집 <b>날짜</b>라서 오늘 날짜만 넘긴다.
+     */
+    private LocalDateTime expiresAt(PublicDataCollector collector) {
+        return collector.stagingExpiresAt(LocalDate.now());
     }
 
     private long stopTimer(Timer.Sample sample, String collectorKey) {
