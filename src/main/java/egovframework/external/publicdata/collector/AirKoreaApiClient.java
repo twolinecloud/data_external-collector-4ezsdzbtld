@@ -6,10 +6,13 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -115,16 +118,26 @@ public class AirKoreaApiClient {
 
     private String fetch(String sourceName, String apiName, String endpoint, String serviceKey,
             Map<String, String> params) {
-        // serviceKey는 이미 URL-encode된 문자열이라 URI.create로 직접 만든다(이중 인코딩 방지,
-        // KmaApiClient 주석과 같은 이유).
+        // serviceKey는 이미 URL-encode된 문자열이라 그대로 붙인다 - 다시 인코딩하면 깨진다
+        // (이중 인코딩 방지, KmaApiClient 주석과 같은 이유).
         StringBuilder url = new StringBuilder(endpoint).append('?').append("serviceKey=").append(serviceKey);
-        params.forEach((key, value) -> url.append('&').append(key).append('=').append(value));
+        // 나머지 파라미터는 반드시 인코딩한다. sidoName="전국"처럼 한글 값이 들어오는데, 원문
+        // 그대로 붙이면 API가 400 Bad Request로 거절한다(2026-09-03 운영 첫 수집에서 실측 -
+        // 같은 요청도 %EC%A0%84%EA%B5%AD로 보내면 200). 값에 한글을 쓰는 건 이 API가 처음이라
+        // 기존 클라이언트에는 없던 문제다.
+        params.forEach((key, value) -> url.append('&').append(key).append('=')
+            .append(URLEncoder.encode(value, StandardCharsets.UTF_8)));
 
         try {
             URI uri = URI.create(url.toString());
             return restTemplate.getForObject(uri, String.class);
+        } catch (HttpClientErrorException e) {
+            // 4xx는 우리 요청이 잘못된 것이라 되풀이해도 그대로다 - 재시도하면 원인 파악만 늦어진다
+            // (2026-09-03 실측: 한글 미인코딩으로 400이 났는데 3회를 되풀이하고 4초를 버렸다).
+            throw new CollectException(sourceName, apiName,
+                "API 호출 실패(요청 오류): " + e.getMessage(), e);
         } catch (RestClientException e) {
-            // 연결 자체가 끊긴 경우도 되풀이하면 살아나는 부류라 재시도 대상으로 넘긴다.
+            // 5xx와 연결 끊김은 되풀이하면 살아나는 부류.
             throw new TransientApiException("API 호출 실패: " + e.getMessage(), e);
         } catch (IllegalArgumentException e) {
             throw new CollectException(sourceName, apiName, "API 호출 실패(잘못된 URI): " + e.getMessage(), e);

@@ -16,6 +16,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -123,6 +125,43 @@ class AirKoreaApiClientTest {
     }
 
     @Test
+    void 한글_파라미터를_URL_인코딩해서_보낸다() {
+        // 원문 그대로 붙이면 API가 400으로 거절한다(2026-09-03 운영 첫 수집에서 실측).
+        // 기대 URL이 인코딩된 형태이므로, 인코딩을 빠뜨리면 이 테스트가 요청 불일치로 깨진다.
+        expectOnce(withSuccess("""
+            {"response":{"body":{"totalCount":0,"items":[],"pageNo":1},
+            "header":{"resultCode":"00","resultMsg":"NORMAL_CODE"}}}
+            """, MediaType.APPLICATION_JSON));
+
+        assertThat(call()).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void 요청_오류_4xx는_재시도하지_않는다() {
+        // 되풀이해도 그대로라 시간만 버린다 - 실제로 400에 3회를 쓰고 4초를 버렸다.
+        server.expect(once(), requestTo(URL))
+            .andRespond(withBadRequest());
+
+        assertThatThrownBy(this::call)
+            .isInstanceOf(CollectException.class)
+            .hasMessageContaining("요청 오류");
+        server.verify(); // 호출이 1회였는지 - 재시도하지 않았음을 확인
+    }
+
+    @Test
+    void 서버_오류_5xx는_재시도한다() {
+        server.expect(once(), requestTo(URL)).andRespond(withServerError());
+        server.expect(once(), requestTo(URL)).andRespond(withSuccess("""
+            {"response":{"body":{"totalCount":1,"items":[{"stationName":"중구","pm10Value":"28"}],
+            "pageNo":1},"header":{"resultCode":"00","resultMsg":"NORMAL_CODE"}}}
+            """, MediaType.APPLICATION_JSON));
+
+        assertThat(call()).hasSize(1);
+        server.verify();
+    }
+
+    @Test
     void resultCode가_정상이_아니면_실패로_올린다() {
         expectOnce(withSuccess("""
             {"response":{"header":{"resultCode":"03","resultMsg":"NO_DATA"}}}
@@ -144,7 +183,12 @@ class AirKoreaApiClientTest {
         server.expect(once(), requestTo(URL)).andRespond(response);
     }
 
+    /**
+     * 수집기와 <b>똑같이</b> 한글 원문을 넘긴다 - 여기서 인코딩된 값을 넘기면 클라이언트의
+     * 인코딩 책임을 건너뛰어, 운영에서 400을 맞은 그 경로를 테스트가 통과시켜 버린다
+     * (2026-09-03 실제로 그렇게 놓쳤다).
+     */
     private List<String> call() {
-        return client.call("소스", "API", ENDPOINT, "test-key", Map.of("sidoName", "%EC%A0%84%EA%B5%AD"));
+        return client.call("소스", "API", ENDPOINT, "test-key", Map.of("sidoName", "전국"));
     }
 }
