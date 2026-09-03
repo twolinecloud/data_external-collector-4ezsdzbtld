@@ -5,6 +5,7 @@ import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
+import egovframework.external.publicdata.collector.AirKoreaRealtimeCollector;
 import egovframework.external.publicdata.collector.DisasterMsgCollector;
 import egovframework.external.publicdata.collector.KmaAsosHourlyCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
@@ -50,6 +51,7 @@ public class PublicDataCollectorScheduler {
     private final KmaLocationCollectorFactory locationCollectorFactory;
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final KmaAsosHourlyCollector kmaAsosHourlyCollector;
+    private final AirKoreaRealtimeCollector airKoreaRealtimeCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
     private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
@@ -86,6 +88,16 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.kma-asos-hourly.cron:0 25 * * * *}")
     public void collectKmaAsosHourly() {
         runAll("kma-asos-hourly", List.of(kmaAsosHourlyCollector));
+    }
+
+    /**
+     * 에어코리아 실시간 대기오염정보: 매시 갱신 -> 20분에 전국 1회 수집({@code sidoName=전국}).
+     * ASOS(25분)와 붙여두지 않은 건 에어코리아 서버가 불안정해 호출 안에서 재시도로 시간을
+     * 끌 수 있기 때문 - 두 수집이 겹쳐 스레드를 함께 물지 않도록 5분 떨어뜨렸다.
+     */
+    @Scheduled(cron = "${public-data.collector.airkorea-realtime-measure.cron:0 20 * * * *}")
+    public void collectAirKoreaRealtime() {
+        runAll("airkorea-realtime-measure", List.of(airKoreaRealtimeCollector));
     }
 
     /**

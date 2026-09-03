@@ -107,6 +107,10 @@ public-data:
     # 올라와 있었지만, 정시 직후에 돌면 아직 없을 수 있어 여유를 뒀다(KmaAsosHourlyCollector 참고).
     kma-asos-hourly:
       cron: "0 25 * * * *"
+    # 매시 20분 - 실측(14:15)에 이미 14:00 자료가 있었다. ASOS(25분)와 5분 떨어뜨린 이유는
+    # PublicDataCollectorScheduler#collectAirKoreaRealtime 주석 참고.
+    airkorea-realtime-measure:
+      cron: "0 20 * * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
