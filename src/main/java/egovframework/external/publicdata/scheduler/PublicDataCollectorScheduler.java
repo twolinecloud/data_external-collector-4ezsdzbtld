@@ -6,6 +6,7 @@ import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.publicdata.collector.DisasterMsgCollector;
+import egovframework.external.publicdata.collector.KmaAsosHourlyCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
 import egovframework.external.publicdata.collector.KmaWeatherWarningListCollector;
 import egovframework.external.publicdata.collector.LivingWthrIdxCollectorFactory;
@@ -48,6 +49,7 @@ public class PublicDataCollectorScheduler {
     private final PublicDataCollectionAttemptService collectionAttemptService;
     private final KmaLocationCollectorFactory locationCollectorFactory;
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
+    private final KmaAsosHourlyCollector kmaAsosHourlyCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
     private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
@@ -75,6 +77,15 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.kma-weather-warning-list.cron:0 */10 * * * *}")
     public void collectKmaWeatherWarningList() {
         runAll("kma-weather-warning-list", List.of(kmaWeatherWarningListCollector));
+    }
+
+    /**
+     * 지상관측(ASOS) 시간자료: 매시 정시 관측 -> 25분에 직전 정시분 수집. API 허브가 {@code stn=0}
+     * 한 번으로 전 지점(97개)을 주므로 지역 순회가 없다({@link KmaAsosHourlyCollector} 참고).
+     */
+    @Scheduled(cron = "${public-data.collector.kma-asos-hourly.cron:0 25 * * * *}")
+    public void collectKmaAsosHourly() {
+        runAll("kma-asos-hourly", List.of(kmaAsosHourlyCollector));
     }
 
     /**

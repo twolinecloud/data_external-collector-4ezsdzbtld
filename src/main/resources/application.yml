@@ -103,6 +103,10 @@ public-data:
       cron: "0 10 0,3,6,9,12,15,18,21 * * *"
     kma-living-air-diffusion-idx:
       cron: "0 10 0,3,6,9,12,15,18,21 * * *"
+    # 매시 25분 - 직전 정시 자료를 받는다. 실측(2026-09-03 13:50)에선 당시 정시 자료가 이미
+    # 올라와 있었지만, 정시 직후에 돌면 아직 없을 수 있어 여유를 뒀다(KmaAsosHourlyCollector 참고).
+    kma-asos-hourly:
+      cron: "0 25 * * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"
@@ -175,6 +179,27 @@ public-data:
       # (2026-08-24, cleanse-db-schema-spec.md §2.8 참고) - 시군구가 아니라 시도 단위 생산.
       endpoint: ${LIVING_WTHR_IDX_ENDPOINT:https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5}
       service-key: ${LIVING_WTHR_IDX_SERVICE_KEY:}
+    asos-hourly:
+      # 지상 종관기상관측(ASOS) 시간자료 - 2026-09-03 신규. 날씨 기호 요구사항의 안개/박무/연무용.
+      #
+      # 다른 기상청 수집기와 달리 data.go.kr이 아니라 API 허브(apihub.kma.go.kr)를 쓴다 -
+      # data.go.kr 쪽은 stnIds가 필수라 지점을 하나씩 불러야 해서(stnIds=0은 NO_DATA, 생략하면
+      # 필수파라미터 오류 - 실측 확인) 전국이면 시간당 97회가 된다. API 허브는 stn=0 한 번으로
+      # 전 지점을 준다. 인증 파라미터 이름도 serviceKey가 아니라 authKey라 키를 따로 둔다.
+      # 자세한 근거는 KmaApiHubClient 주석 참고.
+      #
+      # 주의 - 안개/박무/연무를 "관측된 현상코드"로 읽을 수 없다. 일기 항목(WW/WC/WP)은 일기
+      # 포함여부(IX)가 1인 지점만 채워지는데, 실측 결과 전국 97개 지점 중 9개뿐이었다
+      # (9/1 06시·07시 동일). 교정기관 59개소를 그걸로 덮을 수 없어서, 거의 전 지점에 들어오는
+      # 시정(VS, 96/97)과 습도(HM, 97/97)로 유도한다. 판정 기준값은 기획 확정 대기 중 -
+      # 통상 안개<1km, 박무 1~10km+고습도, 연무 1~10km+저습도.
+      endpoint: ${KMA_ASOS_HOURLY_ENDPOINT:https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php}
+      auth-key: ${KMA_APIHUB_AUTH_KEY:}
+    forecast-bulletin:
+      # 동네예보 통보문 - 가끔/한때, "눈 또는 비"의 순서 구분용(격자예보 코드로는 표현 불가).
+      # 3순위라 아직 실호출 미검증 - 문장 형식과 표현 어휘는 받아봐야 확정된다.
+      endpoint: ${KMA_FORECAST_BULLETIN_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstMsgService}
+      service-key: ${KMA_FORECAST_BULLETIN_SERVICE_KEY:}
   # 법제처(국가법령정보센터) 형사법령정보 - private-doc 31번 항목 참고. LawSourcePort(포트)의
   # 현재 활성 구현은 DirectLawSourceAdapter(직접연결) - 이 연결 자체가 ESB로 이동 예정이라
   # 나중에 스펙이 나오면 이 설정 블록도 ESB 쪽으로 옮겨가고 어댑터만 교체하면 됨.
@@ -197,6 +222,18 @@ public-data:
   safetydata:
     endpoint: ${SAFETYDATA_ENDPOINT:https://www.safetydata.go.kr/V2/api/DSSP-IF-00247}
     service-key: ${SAFETYDATA_SERVICE_KEY:}
+  # 한국환경공단 에어코리아 대기오염정보 - 2026-09-03 신규. 날씨 기호 요구사항의 황사용.
+  # 기상청이 아닌 환경공단 소관이라 kma 블록 밖에 둔다(발급처는 같은 data.go.kr이라 키는 동일).
+  #
+  # 주의 1 - 여기서 얻는 값은 엄밀히 황사가 아니라 미세먼지(PM10)다. 황사 전용 코드가 없어서,
+  # 황사 신호로는 이미 수집 중인 기상특보(황사주의보/경보)가 더 직접적이다. PM10은 보조 지표.
+  # 주의 2 - 응답 봉투가 기상청과 다르다. body.items가 배열 자체이고(기상청은 items.item),
+  # 실패 시엔 OpenAPI_ServiceResponse.cmmMsgHeader로 온다. KmaResponseParser 재사용 불가.
+  # 주의 3 - 서버가 불안정하다. 실호출 검증 중 3회 중 2회 SERVICETIMEOUT_ERROR가 났고 재시도로
+  # 성공했다. 수집기에 재시도가 사실상 필수. 정상 응답 안에도 "통신장애"(값 "-") 결측이 섞인다.
+  airkorea:
+    endpoint: ${AIRKOREA_ENDPOINT:https://apis.data.go.kr/B552584/ArpltnInforInqireSvc}
+    service-key: ${AIRKOREA_SERVICE_KEY:}
 
 # 로그 컬렉터(Log Collector) 연동 - kcais-admin 플랫폼의 tb_batch_exec_log/tb_batch_step_log/
 # tb_ext_collect_log(T1/T2/T6)에 배치 실행 이력을 남기는 별도 REST API 마이크로서비스.
