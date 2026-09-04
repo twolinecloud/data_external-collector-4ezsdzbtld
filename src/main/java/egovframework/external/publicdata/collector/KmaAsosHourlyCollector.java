@@ -46,8 +46,12 @@ public class KmaAsosHourlyCollector implements PublicDataCollector {
      * <p>이 중 화면 요구와 직접 닿는 것은 {@code VS}(시정, 10m 단위)와 {@code HM}(상대습도, %),
      * 그리고 유도 결과를 검증할 때 참고할 {@code WW}/{@code WC}/{@code WP}(일기)와
      * {@code IX}(일기 포함여부)다.</p>
+     *
+     * <p>{@code public}인 이유 - {@code KmaAsosHourlyCleanser}의 구조 드리프트 감지가 이 목록을
+     * 그대로 참조한다({@code KmaWeatherWarningListCleanser}처럼 필드 목록을 정제기 쪽에 따로
+     * 두면 수집기가 필드를 늘려도 정제기가 몰라 드리프트 감지가 새 필드를 못 잡는다).</p>
      */
-    static final List<String> FIELD_NAMES = List.of(
+    public static final List<String> FIELD_NAMES = List.of(
         "TM", "STN", "WD", "WS", "GST_WD", "GST_WS", "GST_TM", "PA", "PS", "PT", "PR",
         "TA", "TD", "HM", "PV", "RN", "RN_DAY", "RN_JUN", "RN_INT", "SD_HR3", "SD_DAY", "SD_TOT",
         "WC", "WP", "WW", "CA_TOT", "CA_MID", "CH_MIN", "CT", "CT_TOP", "CT_MID", "CT_LOW",
