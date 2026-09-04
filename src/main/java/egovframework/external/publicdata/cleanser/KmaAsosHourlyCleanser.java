@@ -85,9 +85,12 @@ public class KmaAsosHourlyCleanser implements PublicDataCleanser {
 
     private JSONObject toRow(AsosStationFacility mapping, JSONObject station) {
         // 46개 필드를 그대로 복사 + facility/매핑 정보를 얹는다(DisasterMsgCleanser의
-        // "원본 복사 + facilityId 추가" 패턴과 동일).
+        // "원본 복사 + facilityId 추가" 패턴과 동일). stnNm은 ASOS 응답 자체엔 없는 값이라
+        // (지점번호만 옴) 매핑 CSV에서 채운다 - 적재 단계가 tb_ext_asos_hourly.stn_nm에
+        // 그대로 옮겨 쓴다.
         JSONObject row = new JSONObject(station.toString());
         row.put("facilityId", mapping.facilityId());
+        row.put("stnNm", mapping.stnName());
         row.put("stnDistanceKm", mapping.distanceKm());
         return row;
     }

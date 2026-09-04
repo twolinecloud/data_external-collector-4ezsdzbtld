@@ -43,6 +43,8 @@ class KmaAsosHourlyCleanserTest {
             assertThat(row.getString("HM")).isEqualTo("96.0");
             assertThat(row.has("facilityId")).isTrue();
             assertThat(row.has("stnDistanceKm")).isTrue();
+            // 서울(108) 지점명이 매핑에서 채워졌는지 - ASOS 원본에는 지점명이 없다.
+            assertThat(row.getString("stnNm")).isEqualTo("Seoul");
             if ("1270254".equals(row.getString("facilityId"))) {
                 found = true;
             }
