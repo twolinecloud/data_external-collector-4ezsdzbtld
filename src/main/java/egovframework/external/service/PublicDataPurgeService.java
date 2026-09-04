@@ -4,6 +4,7 @@ import egovframework.external.model.PurgeResult;
 import egovframework.external.publicdata.loader.mapper.AirQualityMapper;
 import egovframework.external.publicdata.loader.mapper.AsosHourlyMapper;
 import egovframework.external.publicdata.loader.mapper.DisasterMsgMapper;
+import egovframework.external.publicdata.loader.mapper.DustForecastMapper;
 import egovframework.external.publicdata.loader.mapper.LivingAirDiffusionIdxMapper;
 import egovframework.external.publicdata.loader.mapper.LivingUvIdxMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherNcstMapper;
@@ -28,8 +29,9 @@ import java.util.function.IntUnaryOperator;
  * <p><b>대상 테이블 9개</b> - {@code tb_ext_weather_ncst}/{@code _ultra_fcst}/
  * {@code _vilage_fcst}/{@code _warning}/{@code tb_ext_disaster_msg}/
  * {@code tb_ext_living_uv_idx}/{@code tb_ext_living_air_diffusion_idx}(2026-08-24 추가)/
- * {@code tb_ext_asos_hourly}/{@code tb_ext_air_quality}(2026-09-04 추가, 날씨 기호
- * 안개·황사용). {@code tb_ext_law_target}(수집 대상 "목록", 시계열 데이터 아님)과
+ * {@code tb_ext_asos_hourly}/{@code tb_ext_air_quality}/{@code tb_ext_dust_forecast}
+ * (2026-09-04 추가, 날씨 기호 안개·황사용). {@code tb_ext_law_target}(수집 대상 "목록",
+ * 시계열 데이터 아님)과
  * {@code tb_ext_weather_facility}(마스터 테이블)는 폐기 대상이 아니다.</p>
  *
  * <p><b>기준 컬럼은 {@code reg_dtm}(적재 시각)</b> - "실행일시로부터"라는 요구사항 문구가
@@ -73,6 +75,7 @@ public class PublicDataPurgeService {
     private final LivingAirDiffusionIdxMapper livingAirDiffusionIdxMapper;
     private final AsosHourlyMapper asosHourlyMapper;
     private final AirQualityMapper airQualityMapper;
+    private final DustForecastMapper dustForecastMapper;
     private final boolean enabled;
     private final int retentionDays;
 
@@ -86,6 +89,7 @@ public class PublicDataPurgeService {
         LivingAirDiffusionIdxMapper livingAirDiffusionIdxMapper,
         AsosHourlyMapper asosHourlyMapper,
         AirQualityMapper airQualityMapper,
+        DustForecastMapper dustForecastMapper,
         @Value("${public-data.purge.enabled:false}") boolean enabled,
         @Value("${public-data.purge.retention-days:30}") int retentionDays
     ) {
@@ -98,12 +102,13 @@ public class PublicDataPurgeService {
         this.livingAirDiffusionIdxMapper = livingAirDiffusionIdxMapper;
         this.asosHourlyMapper = asosHourlyMapper;
         this.airQualityMapper = airQualityMapper;
+        this.dustForecastMapper = dustForecastMapper;
         this.enabled = enabled;
         this.retentionDays = retentionDays;
     }
 
     /**
-     * 대상 테이블 9개에서 {@code retentionDays}일 초과 행을 각각 삭제한다. 테이블 하나가
+     * 대상 테이블 10개에서 {@code retentionDays}일 초과 행을 각각 삭제한다. 테이블 하나가
      * 실패해도(DB 오류 등) 나머지 테이블은 계속 시도한다.
      *
      * @return 삭제 총 건수 / 성공한 테이블 수 / 실패한 테이블 수 (enabled=false면 전부 0)
@@ -123,6 +128,7 @@ public class PublicDataPurgeService {
             purgeOne("tb_ext_living_air_diffusion_idx", livingAirDiffusionIdxMapper::deleteOlderThan),
             purgeOne("tb_ext_asos_hourly", asosHourlyMapper::deleteOlderThan),
             purgeOne("tb_ext_air_quality", airQualityMapper::deleteOlderThan),
+            purgeOne("tb_ext_dust_forecast", dustForecastMapper::deleteOlderThan),
         };
 
         int totalDeleted = 0;

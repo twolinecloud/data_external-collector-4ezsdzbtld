@@ -4,6 +4,7 @@ import egovframework.external.model.PurgeResult;
 import egovframework.external.publicdata.loader.mapper.AirQualityMapper;
 import egovframework.external.publicdata.loader.mapper.AsosHourlyMapper;
 import egovframework.external.publicdata.loader.mapper.DisasterMsgMapper;
+import egovframework.external.publicdata.loader.mapper.DustForecastMapper;
 import egovframework.external.publicdata.loader.mapper.LivingAirDiffusionIdxMapper;
 import egovframework.external.publicdata.loader.mapper.LivingUvIdxMapper;
 import egovframework.external.publicdata.loader.mapper.WeatherNcstMapper;
@@ -58,11 +59,14 @@ class PublicDataPurgeServiceTest {
     @Mock
     private AirQualityMapper airQualityMapper;
 
+    @Mock
+    private DustForecastMapper dustForecastMapper;
+
     private PublicDataPurgeService service(boolean enabled) {
         return new PublicDataPurgeService(
             weatherNcstMapper, weatherUltraFcstMapper, weatherVilageFcstMapper,
             weatherWarningMapper, disasterMsgMapper, livingUvIdxMapper, livingAirDiffusionIdxMapper,
-            asosHourlyMapper, airQualityMapper,
+            asosHourlyMapper, airQualityMapper, dustForecastMapper,
             enabled, RETENTION_DAYS);
     }
 
@@ -75,7 +79,7 @@ class PublicDataPurgeServiceTest {
     }
 
     @Test
-    void enabled가_true면_9개_테이블_모두_삭제하고_건수를_합산한다() {
+    void enabled가_true면_10개_테이블_모두_삭제하고_건수를_합산한다() {
         when(weatherNcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(1);
         when(weatherUltraFcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(6);
         when(weatherVilageFcstMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(66);
@@ -85,10 +89,11 @@ class PublicDataPurgeServiceTest {
         when(livingAirDiffusionIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(20);
         when(asosHourlyMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(5);
         when(airQualityMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(7);
+        when(dustForecastMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(3);
 
         PurgeResult result = service(true).purgeExpired();
 
-        assertThat(result).isEqualTo(new PurgeResult(1 + 6 + 66 + 921 + 30 + 10 + 20 + 5 + 7, 9, 0));
+        assertThat(result).isEqualTo(new PurgeResult(1 + 6 + 66 + 921 + 30 + 10 + 20 + 5 + 7 + 3, 10, 0));
     }
 
     @Test
@@ -103,9 +108,10 @@ class PublicDataPurgeServiceTest {
         when(livingAirDiffusionIdxMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(20);
         when(asosHourlyMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(5);
         when(airQualityMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(7);
+        when(dustForecastMapper.deleteOlderThan(RETENTION_DAYS)).thenReturn(3);
 
         PurgeResult result = service(true).purgeExpired();
 
-        assertThat(result).isEqualTo(new PurgeResult(1 + 66 + 921 + 30 + 10 + 20 + 5 + 7, 8, 1));
+        assertThat(result).isEqualTo(new PurgeResult(1 + 66 + 921 + 30 + 10 + 20 + 5 + 7 + 3, 9, 1));
     }
 }

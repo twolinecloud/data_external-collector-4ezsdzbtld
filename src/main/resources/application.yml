@@ -111,6 +111,9 @@ public-data:
     # PublicDataCollectorScheduler#collectAirKoreaRealtime 주석 참고.
     airkorea-realtime-measure:
       cron: "0 20 * * * *"
+    # 대기질예보통보(내일 황사) - 05/11/17시경 발표 확인, 23시는 추정. 발표 15분 뒤 수집.
+    airkorea-dust-forecast:
+      cron: "0 15 5,11,17,23 * * *"
   cleanse:
     # 수집 스케줄보다 자주 돌려서 raw_staging COLLECTED 적체가 오래 쌓이지 않게 함
     cron: "0 */5 * * * *"

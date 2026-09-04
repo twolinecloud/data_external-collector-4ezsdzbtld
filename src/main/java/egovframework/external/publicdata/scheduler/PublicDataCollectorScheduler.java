@@ -5,6 +5,7 @@ import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
+import egovframework.external.publicdata.collector.AirKoreaDustForecastCollector;
 import egovframework.external.publicdata.collector.AirKoreaRealtimeCollector;
 import egovframework.external.publicdata.collector.DisasterMsgCollector;
 import egovframework.external.publicdata.collector.KmaAsosHourlyCollector;
@@ -52,6 +53,7 @@ public class PublicDataCollectorScheduler {
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final KmaAsosHourlyCollector kmaAsosHourlyCollector;
     private final AirKoreaRealtimeCollector airKoreaRealtimeCollector;
+    private final AirKoreaDustForecastCollector airKoreaDustForecastCollector;
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
     private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
@@ -98,6 +100,16 @@ public class PublicDataCollectorScheduler {
     @Scheduled(cron = "${public-data.collector.airkorea-realtime-measure.cron:0 20 * * * *}")
     public void collectAirKoreaRealtime() {
         runAll("airkorea-realtime-measure", List.of(airKoreaRealtimeCollector));
+    }
+
+    /**
+     * 대기질예보통보(내일 황사): 하루 최대 4회(05/11/17시경 발표 확인, 23시 발표 추정) ->
+     * 매 발표 시각 15분 뒤에 수집. 실측 기준 확정된 시각이 아니라 관측 2회(05/11시)로 추정한
+     * 값이라 운영 중 어긋나면 조정 필요.
+     */
+    @Scheduled(cron = "${public-data.collector.airkorea-dust-forecast.cron:0 15 5,11,17,23 * * *}")
+    public void collectAirKoreaDustForecast() {
+        runAll("airkorea-dust-forecast", List.of(airKoreaDustForecastCollector));
     }
 
     /**
