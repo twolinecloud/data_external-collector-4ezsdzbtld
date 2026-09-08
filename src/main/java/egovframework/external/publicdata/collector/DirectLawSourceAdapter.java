@@ -1,6 +1,9 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import egovframework.external.utility.PipelineLogUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -44,6 +47,8 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class DirectLawSourceAdapter implements LawSourcePort {
 
+    private static final Logger logger = LogManager.getLogger(DirectLawSourceAdapter.class);
+
     private final RestTemplate restTemplate;
     private final String endpoint;
     private final String oc;
@@ -75,7 +80,16 @@ public class DirectLawSourceAdapter implements LawSourcePort {
             throw new CollectException(sourceName, apiName, "엔드포인트/OC(이용자ID) 설정이 비어있음 (미확정)");
         }
 
-        String lm = URLEncoder.encode(name, StandardCharsets.UTF_8);
+        // 대상 목록에 가운뎃점류 유사문자가 섞여 있으면 API 호출 전에 표준형으로 맞춘다 -
+        // LawNameConfusables 클래스 주석 참고. 정규화가 실제로 일어나면 대상 목록에 또
+        // 같은 문제가 남아있다는 뜻이라 눈에 띄게 남긴다(CSV를 직접 고칠 계기가 되도록).
+        String normalizedName = LawNameConfusables.normalize(name);
+        if (!normalizedName.equals(name)) {
+            PipelineLogUtils.warn(logger, "COLLECT", sourceName, apiName,
+                "법령/행정규칙명에 가운뎃점류 유사문자가 섞여 있어 정규화함: \"" + name + "\" -> \"" + normalizedName + "\"");
+        }
+
+        String lm = URLEncoder.encode(normalizedName, StandardCharsets.UTF_8);
         String url = endpoint + "?OC=" + oc + "&target=" + target + "&LM=" + lm + "&type=JSON";
         try {
             URI uri = URI.create(url);

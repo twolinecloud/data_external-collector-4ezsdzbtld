@@ -70,6 +70,23 @@ class DirectLawSourceAdapterTest {
     }
 
     @Test
+    void 가운뎃점류_유사문자가_섞인_이름은_표준형으로_정규화해서_보낸다() throws CollectException {
+        // 2026-09-08 실제 사례 - 한글 자모 아래아(ㆍ)가 섞여 있으면 행정규칙 조회가
+        // "일치하는 행정규칙이 없습니다"로 실패했다(LawNameConfusablesTest 참고).
+        // 어댑터가 API로 나가기 전에 표준 가운뎃점(·)으로 바꿔 보내는지 확인한다.
+        when(restTemplate.getForObject(any(URI.class), eq(String.class)))
+            .thenReturn("{\"AdmRulService\":{}}");
+
+        adapter("https://example.invalid", "test-oc")
+            .fetchAdminRuleBody("소스", "API", "국가공무원 복무ㆍ징계 관련 예규");
+
+        ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(restTemplate).getForObject(uriCaptor.capture(), eq(String.class));
+        String expectedLm = java.net.URLEncoder.encode("국가공무원 복무·징계 관련 예규", java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(uriCaptor.getValue().toString()).contains("LM=" + expectedLm);
+    }
+
+    @Test
     void 일치하는_법령이_없으면_Law_키의_에러메시지를_담아_CollectException을_던진다() {
         when(restTemplate.getForObject(any(URI.class), eq(String.class)))
             .thenReturn("{\"Law\": \"일치하는 법령이 없습니다.  법령명을 확인하여 주십시오.\"}");
