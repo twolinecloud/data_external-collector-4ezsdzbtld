@@ -43,6 +43,12 @@ import java.nio.charset.StandardCharsets;
  * 확인함. 다만 응답 봉투가 법령과 다르다: 성공 시 최상위 키가 {@code "AdmRulService"}이고
  * 내부 필드 구성도 다르다(개정문/별표/행정규칙기본정보/조문내용/첨부파일/부칙/제개정이유 -
  * 법령의 {@code 조문} 중첩 구조와 다름). {@link #validateAdminRule} 참고.</p>
+ *
+ * <p><b>가운뎃점류 문자, target별로 요구사항이 반대(2026-09-09 확인)</b>: {@code eflaw}는
+ * 한글 자모 아래아(ㆍ)를 줘야 매칭되고 표준 가운뎃점(·)을 주면 HTML 에러 페이지가 오지만,
+ * {@code admrul}은 반대로 표준 가운뎃점(·)을 줘야 매칭된다. {@link #call}이 target에 맞는
+ * {@link LawNameConfusables} 메서드를 골라 호출 직전에 정규화한다 - 대상 목록(CSV/admin-db)
+ * 원본 문자가 뭐든 이 관문 하나로 커버됨.</p>
  */
 @Component
 public class DirectLawSourceAdapter implements LawSourcePort {
@@ -80,13 +86,17 @@ public class DirectLawSourceAdapter implements LawSourcePort {
             throw new CollectException(sourceName, apiName, "엔드포인트/OC(이용자ID) 설정이 비어있음 (미확정)");
         }
 
-        // 대상 목록에 가운뎃점류 유사문자가 섞여 있으면 API 호출 전에 표준형으로 맞춘다 -
-        // LawNameConfusables 클래스 주석 참고. 정규화가 실제로 일어나면 대상 목록에 또
-        // 같은 문제가 남아있다는 뜻이라 눈에 띄게 남긴다(CSV를 직접 고칠 계기가 되도록).
-        String normalizedName = LawNameConfusables.normalize(name);
+        // 대상 목록에 가운뎃점류 문자가 섞여 있으면 API 호출 전에 target이 실제로 요구하는
+        // 형태로 맞춘다 - eflaw(법령)와 admrul(행정규칙)이 정반대 문자를 요구하는 게 실측
+        // 확인돼(2026-09-09) target별로 분기한다. LawNameConfusables 클래스 주석 참고.
+        // 정규화가 실제로 일어나면 대상 목록에 또 같은 문제가 남아있다는 뜻이라 눈에 띄게
+        // 남긴다(CSV를 직접 고칠 계기가 되도록).
+        String normalizedName = "admrul".equals(target)
+            ? LawNameConfusables.normalizeForAdminRule(name)
+            : LawNameConfusables.normalizeForLaw(name);
         if (!normalizedName.equals(name)) {
             PipelineLogUtils.warn(logger, "COLLECT", sourceName, apiName,
-                "법령/행정규칙명에 가운뎃점류 유사문자가 섞여 있어 정규화함: \"" + name + "\" -> \"" + normalizedName + "\"");
+                "법령/행정규칙명에 가운뎃점류 유사문자가 섞여 있어 정규화함(target=" + target + "): \"" + name + "\" -> \"" + normalizedName + "\"");
         }
 
         String lm = URLEncoder.encode(normalizedName, StandardCharsets.UTF_8);

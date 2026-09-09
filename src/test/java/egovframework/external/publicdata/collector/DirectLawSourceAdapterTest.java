@@ -70,7 +70,7 @@ class DirectLawSourceAdapterTest {
     }
 
     @Test
-    void 가운뎃점류_유사문자가_섞인_이름은_표준형으로_정규화해서_보낸다() throws CollectException {
+    void 행정규칙명의_가운뎃점류_유사문자는_표준형으로_정규화해서_보낸다() throws CollectException {
         // 2026-09-08 실제 사례 - 한글 자모 아래아(ㆍ)가 섞여 있으면 행정규칙 조회가
         // "일치하는 행정규칙이 없습니다"로 실패했다(LawNameConfusablesTest 참고).
         // 어댑터가 API로 나가기 전에 표준 가운뎃점(·)으로 바꿔 보내는지 확인한다.
@@ -83,6 +83,23 @@ class DirectLawSourceAdapterTest {
         ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
         verify(restTemplate).getForObject(uriCaptor.capture(), eq(String.class));
         String expectedLm = java.net.URLEncoder.encode("국가공무원 복무·징계 관련 예규", java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(uriCaptor.getValue().toString()).contains("LM=" + expectedLm);
+    }
+
+    @Test
+    void 법령명의_표준_가운뎃점은_한글_자모_아래아로_정규화해서_보낸다() throws CollectException {
+        // 2026-09-09 실측 - eflaw는 admrul과 반대로 유사문자(ㆍ)를 줘야 매칭되고, 표준
+        // 가운뎃점(·)을 주면 JSON이 아닌 HTML 에러 페이지가 온다(moleg-eflaw-dot-char-regression
+        // 메모 참고). 어댑터가 API로 나가기 전에 아래아(ㆍ)로 바꿔 보내는지 확인한다.
+        when(restTemplate.getForObject(any(URI.class), eq(String.class)))
+            .thenReturn("{\"법령\":{}}");
+
+        adapter("https://example.invalid", "test-oc")
+            .fetchLawBody("소스", "API", "인지 첩부·첨부 및 공탁 제공에 관한 특례법");
+
+        ArgumentCaptor<URI> uriCaptor = ArgumentCaptor.forClass(URI.class);
+        verify(restTemplate).getForObject(uriCaptor.capture(), eq(String.class));
+        String expectedLm = java.net.URLEncoder.encode("인지 첩부ㆍ첨부 및 공탁 제공에 관한 특례법", java.nio.charset.StandardCharsets.UTF_8);
         assertThat(uriCaptor.getValue().toString()).contains("LM=" + expectedLm);
     }
 
