@@ -1,5 +1,9 @@
 package egovframework.external.publicdata.collector;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+
 /**
  * 법제처 수집 대상 목록의 1건 - 법령(LAW) 또는 행정규칙(ADMIN_RULE) 둘 다 이 레코드로 표현한다.
  *
@@ -28,8 +32,33 @@ public record MolegLaw(String lawId, String lawName, String mst, String lawType,
     public static final String DOC_TYPE_LAW = "LAW";
     public static final String DOC_TYPE_ADMIN_RULE = "ADMIN_RULE";
 
+    private static final DateTimeFormatter EFFECTIVE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
     /** docType 컬럼이 없던 기존 데이터(csv 60건/db 소스) 하위호환용 - null/공백이면 LAW로 취급. */
     public String docTypeOrDefault() {
         return (docType == null || docType.isBlank()) ? DOC_TYPE_LAW : docType;
+    }
+
+    /**
+     * 시행일자가 {@code asOf} 기준으로 이미 지났는지 - {@code target=eflaw/admrul}은 "현재
+     * 시행 중인 버전"만 반환하기 때문에, 공포는 됐지만 아직 시행 전인 법령(예: 2026-09-09
+     * 확인된 "공소청법"(시행 2026-10-02), "친일반민족행위자 재산의 국가귀속 등에 관한
+     * 특별법"(시행 2026-12-03))은 시행일 전까지 조회해도 항상 실패한다 - 코드 버그가 아니라
+     * 예정된 상태라, {@link MolegLawCollectorFactory}가 이 메서드로 시행일 도래 전엔 수집
+     * 대상에서 미리 제외한다(재발 방지, moleg-eflaw-dot-char-regression 메모 참고).
+     *
+     * <p>{@code effectiveDate}가 없거나 형식이 깨졌으면 판단할 수 없으므로 안전하게
+     * {@code true}(수집 대상 유지) - 필터링 실패가 수집 누락으로 이어지면 안 되기 때문.</p>
+     */
+    public boolean isEffectiveAsOf(LocalDate asOf) {
+        if (effectiveDate == null || effectiveDate.isBlank()) {
+            return true;
+        }
+        try {
+            LocalDate parsed = LocalDate.parse(effectiveDate, EFFECTIVE_DATE_FORMAT);
+            return !parsed.isAfter(asOf);
+        } catch (DateTimeParseException e) {
+            return true;
+        }
     }
 }

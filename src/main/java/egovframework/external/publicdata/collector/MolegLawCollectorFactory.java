@@ -1,8 +1,12 @@
 package egovframework.external.publicdata.collector;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -22,16 +26,35 @@ import java.util.List;
  * 개별 컬렉터가 자기 {@code operationKey()}로 법령/행정규칙을 구분해 raw_staging에 적재하므로
  * Cleanse 단계에서 알맞은 정제기({@code MolegCriminalLawCleanser}/{@code MolegAdminRuleCleanser})가
  * 선택된다.</p>
+ *
+ * <p><b>시행일 미도래 건 제외(2026-09-09 추가)</b>: {@link MolegLaw#isEffectiveAsOf}가
+ * {@code false}인 항목(공포는 됐지만 아직 시행 전)은 컬렉터를 만들지 않는다 - 시행 전엔
+ * {@code eflaw/admrul} 조회가 항상 실패하는 게 정상이라, 매일 "실패"로 잡혀 잡음이 되는 걸
+ * 막고 시행일이 지나면 코드/설정 변경 없이 자동으로 수집 대상에 편입되게 한다.</p>
  */
 @Component
 @RequiredArgsConstructor
 public class MolegLawCollectorFactory {
 
+    private static final Logger logger = LogManager.getLogger(MolegLawCollectorFactory.class);
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     private final LawSourcePort lawSourcePort;
     private final MolegLawTargetSource lawTargetSource;
 
     public List<PublicDataCollector> allLawCollectors() {
-        return lawTargetSource.current().stream()
+        LocalDate today = LocalDate.now(KST);
+        List<MolegLaw> all = lawTargetSource.current();
+
+        List<MolegLaw> notYetEffective = all.stream().filter(law -> !law.isEffectiveAsOf(today)).toList();
+        if (!notYetEffective.isEmpty()) {
+            notYetEffective.forEach(law -> logger.info(
+                "[COLLECT] 시행일 미도래로 이번 수집에서 제외: lawId={}, name={}, effectiveDate={}",
+                law.lawId(), law.lawName(), law.effectiveDate()));
+        }
+
+        return all.stream()
+            .filter(law -> law.isEffectiveAsOf(today))
             .<PublicDataCollector>map(this::toCollector)
             .toList();
     }
