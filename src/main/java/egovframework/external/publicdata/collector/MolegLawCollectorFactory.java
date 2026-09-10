@@ -1,12 +1,8 @@
 package egovframework.external.publicdata.collector;
 
 import lombok.RequiredArgsConstructor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -27,34 +23,28 @@ import java.util.List;
  * Cleanse 단계에서 알맞은 정제기({@code MolegCriminalLawCleanser}/{@code MolegAdminRuleCleanser})가
  * 선택된다.</p>
  *
- * <p><b>시행일 미도래 건 제외(2026-09-09 추가)</b>: {@link MolegLaw#isEffectiveAsOf}가
- * {@code false}인 항목(공포는 됐지만 아직 시행 전)은 컬렉터를 만들지 않는다 - 시행 전엔
- * {@code eflaw/admrul} 조회가 항상 실패하는 게 정상이라, 매일 "실패"로 잡혀 잡음이 되는 걸
- * 막고 시행일이 지나면 코드/설정 변경 없이 자동으로 수집 대상에 편입되게 한다.</p>
+ * <p><b>시행일 미도래 건, 여기서 미리 거르지 않는다(2026-09-10 정정)</b>: 처음엔 {@link
+ * MolegLaw#isEffectiveAsOf}가 {@code false}인 항목을 이 팩토리가 컬렉터 자체를 안 만들도록
+ * 걸러내려 했는데(2026-09-09, 커밋 59dbbf3), 이게 "상법"/"상법 시행령"(개정본 시행일은
+ * 2027-01-01이지만, "상법"이라는 이름 자체는 이미 수십 년째 시행 중인 법)을 잘못 걸러내는
+ * 회귀를 만들었다 - CSV의 {@code effectiveDate}는 "그 법령명이 API에 존재하는 시점"이 아니라
+ * "대상 목록에 올린 이 특정 개정본이 시행되는 시점"이라 서로 다르다. {@code eflaw}는 이름으로
+ * "현재 시행 중인 버전"을 찾기 때문에, 개정 예정인 기존 법(상법)은 개정일 전에도 호출하면
+ * 여전히 성공한다(현행 버전을 돌려줌) - 반면 아예 새로 만들어진 법(공소청법 등)은 그 이름이
+ * 시행 전엔 존재 자체가 없어 실패한다. 이 둘을 이름만으로는 미리 구분할 수 없으므로, 여기서는
+ * 거르지 않고 항상 시도한다 - "이름이 아직 없어서" 실패하는 예상된 경우의 처리는
+ * {@link MolegCriminalLawCollector}/{@link MolegAdminRuleCollector}가 실제 실패 응답을 받은
+ * 뒤(즉 무슨 이유로 실패했는지 안 다음)에 한다.</p>
  */
 @Component
 @RequiredArgsConstructor
 public class MolegLawCollectorFactory {
 
-    private static final Logger logger = LogManager.getLogger(MolegLawCollectorFactory.class);
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final LawSourcePort lawSourcePort;
     private final MolegLawTargetSource lawTargetSource;
 
     public List<PublicDataCollector> allLawCollectors() {
-        LocalDate today = LocalDate.now(KST);
-        List<MolegLaw> all = lawTargetSource.current();
-
-        List<MolegLaw> notYetEffective = all.stream().filter(law -> !law.isEffectiveAsOf(today)).toList();
-        if (!notYetEffective.isEmpty()) {
-            notYetEffective.forEach(law -> logger.info(
-                "[COLLECT] 시행일 미도래로 이번 수집에서 제외: lawId={}, name={}, effectiveDate={}",
-                law.lawId(), law.lawName(), law.effectiveDate()));
-        }
-
-        return all.stream()
-            .filter(law -> law.isEffectiveAsOf(today))
+        return lawTargetSource.current().stream()
             .<PublicDataCollector>map(this::toCollector)
             .toList();
     }

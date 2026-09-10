@@ -54,4 +54,17 @@ class MolegAdminRuleCollectorTest {
 
         assertThatThrownBy(collector::collect).isInstanceOf(CollectException.class);
     }
+
+    @Test
+    void 시행일_미도래_행정규칙이_실패하면_예외를_삼키고_빈_결과를_반환한다() throws CollectException {
+        MolegLaw notYetEffective = new MolegLaw("99999", "미래 행정규칙", "1", "예규",
+            "20260101", "29991231", "법무부", MolegLaw.DOC_TYPE_ADMIN_RULE);
+        when(lawSourcePort.fetchAdminRuleBody(any(), any(), eq("미래 행정규칙")))
+            .thenThrow(new CollectException("소스", "API", "행정규칙 조회 실패"));
+        MolegAdminRuleCollector collector = new MolegAdminRuleCollector(lawSourcePort, notYetEffective);
+
+        List<String> result = collector.collect();
+
+        assertThat(result).isEmpty();
+    }
 }

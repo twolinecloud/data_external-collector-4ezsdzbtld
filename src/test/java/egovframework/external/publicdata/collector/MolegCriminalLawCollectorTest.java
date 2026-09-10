@@ -51,4 +51,32 @@ class MolegCriminalLawCollectorTest {
 
         assertThatThrownBy(collector::collect).isInstanceOf(CollectException.class);
     }
+
+    @Test
+    void 시행일_미도래_법령이_실패하면_예외를_삼키고_빈_결과를_반환한다() throws CollectException {
+        // 2026-09-10 실측 - "공소청법"처럼 아직 시행 전이라 이름 자체가 API에 없는 신규
+        // 법령은 실패가 예상된 결과다. WARN/FAILED로 잡혀 매일 잡음이 되는 걸 막는다.
+        MolegLaw notYetEffective = new MolegLaw("015092", "공소청법", "285045", "법률",
+            "20260324", "29991231", "법무부", MolegLaw.DOC_TYPE_LAW);
+        when(lawSourcePort.fetchLawBody(any(), any(), eq("공소청법")))
+            .thenThrow(new CollectException("소스", "API", "법령 조회 실패(법령명=공소청법): {}"));
+        MolegCriminalLawCollector collector = new MolegCriminalLawCollector(lawSourcePort, notYetEffective);
+
+        List<String> result = collector.collect();
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void 시행일이_지난_뒤엔_실패해도_그대로_전파된다() throws CollectException {
+        // effectiveDate가 과거인데도 실패하면(예: "상법"처럼 이름은 이미 존재하는 법인데
+        // 다른 이유로 실패) 시행일 미도래로 오인해서 삼키면 안 된다 - 진짜 실패로 취급.
+        MolegLaw alreadyEffective = new MolegLaw("001702", "상법", "284143", "법률",
+            "20260306", "20260306", "법무부", MolegLaw.DOC_TYPE_LAW);
+        when(lawSourcePort.fetchLawBody(any(), any(), eq("상법")))
+            .thenThrow(new CollectException("소스", "API", "API 호출 실패"));
+        MolegCriminalLawCollector collector = new MolegCriminalLawCollector(lawSourcePort, alreadyEffective);
+
+        assertThatThrownBy(collector::collect).isInstanceOf(CollectException.class);
+    }
 }

@@ -5,9 +5,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,17 +18,16 @@ import static org.mockito.Mockito.when;
  * {@link MolegLawCollectorFactory}가 대상 목록(법령 433건 + 행정규칙 58건, 2026-08-28 확대)만큼
  * 컬렉터를 올바르게 생성하는지 검증. 실제 API 호출은 하지 않음 - 생성/키 유일성만 확인.
  *
- * <p>대상 목록 중 시행일이 아직 안 지난 건(2026-09-09 기준 "공소청법"/"친일반민족행위자
- * 재산의 국가귀속 등에 관한 특별법" 2건)은 {@link MolegLawCollectorFactory}가 제외하므로,
- * 실제 CSV를 쓰는 테스트는 그 개수를 직접 다시 계산해서 뺀다({@link #notYetEffectiveCount})
- * - 시행일이 지나면 자동으로 491건 그대로 돌아오게, 날짜에 종속되지 않게 하기 위함.</p>
+ * <p>시행일이 아직 안 지난 항목도 컬렉터는 그대로 만든다(2026-09-10 정정, 클래스 주석 참고) -
+ * "상법"처럼 이름은 이미 존재하는 개정 예정 법령을 여기서 잘못 걸러내는 회귀가 있었어서,
+ * 그 판단은 {@link MolegCriminalLawCollector}/{@link MolegAdminRuleCollector}가 실제 조회
+ * 실패를 받은 뒤로 옮겼다. 그래서 이 테스트는 다시 날짜에 무관하게 항상 491건을 기대한다.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class MolegLawCollectorFactoryTest {
 
     private static final int LAW_COUNT = 433;
     private static final int ADMIN_RULE_COUNT = 58;
-    private static final DateTimeFormatter EFFECTIVE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final LawSourcePort lawSourcePort = new DirectLawSourceAdapter(
         new org.springframework.web.client.RestTemplate(), "https://example.invalid", "test-oc");
@@ -42,38 +38,19 @@ class MolegLawCollectorFactoryTest {
     private MolegLawTargetSource mockSource;
 
     @Test
-    void 법령_행정규칙_합계에서_시행일_미도래_건을_제외한_만큼_컬렉터가_생성된다() {
-        int expected = LAW_COUNT + ADMIN_RULE_COUNT - notYetEffectiveCount();
-
-        assertThat(factory.allLawCollectors()).hasSize(expected);
-    }
-
-    /** 실제 CSV를 훑어 시행일이 아직 안 지난 건수를 센다 - {@link MolegLaw#isEffectiveAsOf}와
-     * 별개로 직접 계산해서, 필터링 로직 자체의 버그를 이 테스트가 가려버리지 않게 한다. */
-    private static int notYetEffectiveCount() {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
-        return (int) new MolegLawListLoader().all().stream()
-            .filter(law -> {
-                try {
-                    return LocalDate.parse(law.effectiveDate(), EFFECTIVE_DATE_FORMAT).isAfter(today);
-                } catch (Exception e) {
-                    return false;
-                }
-            })
-            .count();
+    void 법령_행정규칙_합계만큼_컬렉터가_생성된다() {
+        assertThat(factory.allLawCollectors()).hasSize(LAW_COUNT + ADMIN_RULE_COUNT);
     }
 
     @Test
-    void 시행일이_아직_안_지난_항목은_컬렉터가_생성되지_않는다() {
+    void 시행일이_아직_안_지난_항목도_컬렉터가_생성된다() {
+        // 2026-09-10 정정 - "상법"(개정본 시행일 2027-01-01이지만 이름 자체는 이미 시행 중)을
+        // 여기서 걸러내면 실제로 조회 가능한 현행 버전까지 놓치는 회귀가 있었다.
         MolegLaw notYetEffective = new MolegLaw("999999", "미래법", "1", "법률", "20260101", "29991231", "법무부", MolegLaw.DOC_TYPE_LAW);
-        MolegLaw effective = new MolegLaw("999998", "현행법", "2", "법률", "20260101", "20260101", "법무부", MolegLaw.DOC_TYPE_LAW);
-        when(mockSource.current()).thenReturn(List.of(notYetEffective, effective));
+        when(mockSource.current()).thenReturn(List.of(notYetEffective));
         MolegLawCollectorFactory f = new MolegLawCollectorFactory(lawSourcePort, mockSource);
 
-        List<PublicDataCollector> result = f.allLawCollectors();
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).apiName()).contains("현행법");
+        assertThat(f.allLawCollectors()).hasSize(1);
     }
 
     @Test
@@ -97,9 +74,7 @@ class MolegLawCollectorFactoryTest {
 
         long lawCollectors = all.stream().filter(c -> c instanceof MolegCriminalLawCollector).count();
         long adminRuleCollectors = all.stream().filter(c -> c instanceof MolegAdminRuleCollector).count();
-        // 시행일 미도래 제외 대상 2건은 전부 docType=LAW라 LAW_COUNT 쪽에서만 뺀다(위
-        // notYetEffectiveCount와 달리 여기선 법령/행정규칙 구분까지 나눠야 해서 재사용 안 함).
-        assertThat(lawCollectors).isEqualTo(LAW_COUNT - notYetEffectiveCount());
+        assertThat(lawCollectors).isEqualTo(LAW_COUNT);
         assertThat(adminRuleCollectors).isEqualTo(ADMIN_RULE_COUNT);
     }
 
