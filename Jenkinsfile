@@ -1,6 +1,6 @@
 podTemplate(
     containers: [
-        containerTemplate(name: 'jnlp', image: 'registry.turacocloud.com/turaco-common/jenkins-inbound-agent:3309.v27b_9314fd1a_4-1', args: '${computer.jnlpmac} ${computer.name}'),
+        containerTemplate(name: 'jnlp', image: 'registry.turacocloud.com/turaco-common/jenkins-inbound-agent:jdk21', args: '${computer.jnlpmac} ${computer.name}'),
         containerTemplate(name: 'maven', image: 'registry.turacocloud.com/turaco-common/maven:3.8.3-openjdk-17', command: 'sleep', args: '30d'),
         containerTemplate(name: 'podman', image: 'registry.turacocloud.com/turaco-common/podman:stable-v5', command: 'cat', ttyEnabled: true, privileged: true),
         containerTemplate(name: 'helm-kubectl', image: 'registry.turacocloud.com/turaco-common/helm-kubectl:latest', command: 'cat', ttyEnabled: true),
