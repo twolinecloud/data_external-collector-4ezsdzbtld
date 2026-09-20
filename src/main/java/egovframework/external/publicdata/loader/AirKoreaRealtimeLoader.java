@@ -75,7 +75,15 @@ public class AirKoreaRealtimeLoader implements PublicDataLoader {
         String firstFailure = null;
         for (int i = 0; i < rows.length(); i++) {
             try {
-                mapper.upsert(toParams(rows.getJSONObject(i), dto));
+                JSONObject row = rows.getJSONObject(i);
+                // dataTime이 JSON null인 행이 실제로 온다(2026-09-21 문경시 실측). base_dtm이 멱등키라
+                // 저장할 수 없고, 실패로 던지면 재시도해도 같은 결과라 매시간 ERROR만 쌓인다 - 건너뛴다.
+                if (row.isNull("dataTime")) {
+                    PipelineLogUtils.warn(logger, STAGE, dto.getSourceName(), dto.getApiName(),
+                        "측정시각(dataTime) 없음 - 건너뜀 " + rowLabel(rows, i) + " 원본행=" + row);
+                    continue;
+                }
+                mapper.upsert(toParams(row, dto));
             } catch (Exception e) {
                 failed++;
                 String label = rowLabel(rows, i);

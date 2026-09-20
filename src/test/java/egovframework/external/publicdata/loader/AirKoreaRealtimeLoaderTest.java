@@ -117,6 +117,23 @@ class AirKoreaRealtimeLoaderTest {
     }
 
     @Test
+    void dataTime이_null인_행은_실패가_아니라_건너뛰고_나머지는_적재한다() throws LoadException {
+        String nullTimeRow = ROW.replace("\"dataTime\":\"2026-09-04 10:00\"", "\"dataTime\":null")
+            .replace("\"stationName\":\"별양동\"", "\"stationName\":\"문경시\"")
+            .replace("\"facilityId\":\"1270254\"", "\"facilityId\":\"1272355\"");
+        RawStagingDto dto = RawStagingDto.builder()
+            .operationKey("airkorea-realtime-measure")
+            .cleansedPayload("[" + nullTimeRow + "," + ROW + "]")
+            .build();
+
+        loader().load(dto);
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(mapper, times(1)).upsert(captor.capture());
+        assertThat(captor.getValue().get("facilityId")).isEqualTo("1270254");
+    }
+
+    @Test
     void 행_하나가_실패해도_나머지_행은_적재되고_마지막에_실패로_보고한다() throws LoadException {
         String row2 = ROW.replace("\"stationName\":\"별양동\"", "\"stationName\":\"신사동\"")
             .replace("\"facilityId\":\"1270254\"", "\"facilityId\":\"1270552\"");
