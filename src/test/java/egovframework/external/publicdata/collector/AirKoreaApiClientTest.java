@@ -4,6 +4,7 @@ import egovframework.external.exception.CollectException;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ResponseCreator;
@@ -18,6 +19,7 @@ import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withBadRequest;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -43,7 +45,7 @@ class AirKoreaApiClientTest {
     void setUp() {
         restTemplate = new RestTemplate();
         server = MockRestServiceServer.bindTo(restTemplate).build();
-        client = new AirKoreaApiClient(restTemplate);
+        client = new AirKoreaApiClient(restTemplate, new long[] {0L, 0L, 0L}); // 대기 없이 4회 시도
     }
 
     @Test
@@ -97,15 +99,30 @@ class AirKoreaApiClientTest {
 
     @Test
     void 재시도를_다_써도_실패하면_수집_실패로_올린다() {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             server.expect(once(), requestTo(URL))
                 .andRespond(withSuccess(TIMEOUT_BODY, MediaType.APPLICATION_JSON));
         }
 
         assertThatThrownBy(this::call)
             .isInstanceOf(CollectException.class)
-            .hasMessageContaining("일시적 실패가 3회 반복됨")
+            .hasMessageContaining("일시적 실패가 4회 반복됨")
             .hasMessageContaining("SERVICETIMEOUT_ERROR");
+        server.verify();
+    }
+
+    @Test
+    void 세번_연속_504여도_네번째_시도에서_성공하면_수집한다() {
+        // 2026-09-21 실측: 각 시도가 5초 만에 504로 끝나 2초 간격 3회로는 포기했다.
+        for (int i = 0; i < 3; i++) {
+            server.expect(once(), requestTo(URL)).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        }
+        server.expect(once(), requestTo(URL)).andRespond(withSuccess("""
+            {"response":{"body":{"totalCount":1,"items":[{"stationName":"중구","pm10Value":"28"}],
+            "pageNo":1},"header":{"resultCode":"00","resultMsg":"NORMAL_CODE"}}}
+            """, MediaType.APPLICATION_JSON));
+
+        assertThat(call()).hasSize(1);
         server.verify();
     }
 

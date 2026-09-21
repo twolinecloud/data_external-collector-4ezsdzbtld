@@ -1,8 +1,13 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -39,10 +44,28 @@ public class KmaApiHubClient {
     /** 응답 본문 인코딩. API 허브 typ01 계열은 UTF-8이 아니라 CP949로 내려준다. */
     private static final Charset RESPONSE_CHARSET = Charset.forName("CP949");
 
-    private final RestTemplate restTemplate;
+    /**
+     * 시도 사이 대기(ms) - 시도 횟수는 이 배열 길이 + 1. 2026-09-21 실측: 재시도가 없어서, 허브가
+     * 30초를 붙잡고 504를 내는 시각에는 한 번 실패로 끝났다(7시간 중 3번). 바로 다음 정상 시각에는
+     * 320ms에 성공했다. 시도당 15초(전용 RestTemplate의 read timeout) x 3 + 대기 20초 = 최악 약
+     * 65초로 수집 전체 제한(180초) 안에 들어온다.
+     */
+    private static final long[] DEFAULT_RETRY_BACKOFF_MS = {5000L, 15000L};
 
-    public KmaApiHubClient(RestTemplate restTemplate) {
+    private static final Logger logger = LogManager.getLogger(KmaApiHubClient.class);
+
+    private final RestTemplate restTemplate;
+    private final long[] retryBackoffMs;
+
+    @Autowired
+    public KmaApiHubClient(@Qualifier("kmaApiHubRestTemplate") RestTemplate restTemplate) {
+        this(restTemplate, DEFAULT_RETRY_BACKOFF_MS);
+    }
+
+    /** 대기 시간을 직접 지정하는 생성자 - 테스트에서 실제로 20초를 기다리지 않으려고 씀. */
+    KmaApiHubClient(RestTemplate restTemplate, long[] retryBackoffMs) {
         this.restTemplate = restTemplate;
+        this.retryBackoffMs = retryBackoffMs;
     }
 
     /**
@@ -67,15 +90,42 @@ public class KmaApiHubClient {
         StringBuilder url = new StringBuilder(endpoint).append('?').append("authKey=").append(authKey);
         params.forEach((key, value) -> url.append('&').append(key).append('=').append(value));
 
+        URI uri;
         try {
-            URI uri = URI.create(url.toString());
-            byte[] raw = restTemplate.getForObject(uri, byte[].class);
-            if (raw == null) {
-                throw new CollectException(sourceName, apiName, "API 호출 실패: 빈 응답");
-            }
-            return new String(raw, RESPONSE_CHARSET);
-        } catch (RestClientException | IllegalArgumentException e) {
+            uri = URI.create(url.toString());
+        } catch (IllegalArgumentException e) {
             throw new CollectException(sourceName, apiName, "API 호출 실패: " + e.getMessage(), e);
+        }
+
+        int maxAttempts = retryBackoffMs.length + 1;
+        for (int attempt = 1; ; attempt++) {
+            try {
+                byte[] raw = restTemplate.getForObject(uri, byte[].class);
+                if (raw == null) {
+                    throw new CollectException(sourceName, apiName, "API 호출 실패: 빈 응답");
+                }
+                return new String(raw, RESPONSE_CHARSET);
+            } catch (HttpClientErrorException e) {
+                // 4xx(인증키 오류 등)는 되풀이해도 그대로다 - 재시도하면 원인 파악만 늦어진다.
+                throw new CollectException(sourceName, apiName, "API 호출 실패(요청 오류): " + e.getMessage(), e);
+            } catch (RestClientException e) {
+                // 5xx, 타임아웃, 연결 끊김은 되풀이하면 살아나는 부류.
+                if (attempt >= maxAttempts) {
+                    throw new CollectException(sourceName, apiName,
+                        "API 호출 실패(" + maxAttempts + "회 시도): " + e.getMessage(), e);
+                }
+                logger.warn("[{}] {} - 일시적 실패({}/{}): {}", sourceName, apiName, attempt, maxAttempts, e.getMessage());
+                backoff(retryBackoffMs[attempt - 1]);
+            }
+        }
+    }
+
+    private void backoff(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("재시도 대기 중 인터럽트됨", e);
         }
     }
 

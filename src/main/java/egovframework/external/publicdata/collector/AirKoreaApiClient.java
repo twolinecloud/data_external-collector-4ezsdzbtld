@@ -5,6 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
@@ -43,16 +44,29 @@ public class AirKoreaApiClient {
     private static final Logger logger = LogManager.getLogger(AirKoreaApiClient.class);
 
     private static final int MAX_PAGES = 10;
-    private static final int MAX_ATTEMPTS = 3;
-    private static final long RETRY_BACKOFF_MS = 2000L;
+
+    /**
+     * 시도 사이 대기(ms) - 시도 횟수는 이 배열 길이 + 1. 2026-09-21 실측: 2초 간격 3회(총 14~19초)로는
+     * 에어코리아 백엔드 장애(각 시도가 5초 만에 504)를 못 넘겨 7시간 중 3번 그 시각 자료를 놓쳤다.
+     * 시도당 약 5초 + 대기 합 50초 = 최악 약 70초로, 수집 전체 제한(180초) 안에 들어온다.
+     */
+    private static final long[] DEFAULT_RETRY_BACKOFF_MS = {5000L, 15000L, 30000L};
 
     /** 되풀이하면 성공할 수 있는 실패. 05 = 서비스 연결실패(에어코리아 서버측 일시 장애). */
     private static final String TRANSIENT_REASON_CODE = "05";
 
     private final RestTemplate restTemplate;
+    private final long[] retryBackoffMs;
 
+    @Autowired
     public AirKoreaApiClient(RestTemplate restTemplate) {
+        this(restTemplate, DEFAULT_RETRY_BACKOFF_MS);
+    }
+
+    /** 대기 시간을 직접 지정하는 생성자 - 테스트에서 실제로 50초를 기다리지 않으려고 씀. */
+    AirKoreaApiClient(RestTemplate restTemplate, long[] retryBackoffMs) {
         this.restTemplate = restTemplate;
+        this.retryBackoffMs = retryBackoffMs;
     }
 
     public List<String> call(String sourceName, String apiName, String endpoint, String serviceKey,
@@ -90,26 +104,27 @@ public class AirKoreaApiClient {
 
     private ParsedPage fetchWithRetry(String sourceName, String apiName, String endpoint, String serviceKey,
             Map<String, String> params) {
+        int maxAttempts = retryBackoffMs.length + 1;
         CollectException lastFailure = null;
 
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return parse(sourceName, apiName, fetch(sourceName, apiName, endpoint, serviceKey, params));
             } catch (TransientApiException e) {
                 lastFailure = new CollectException(sourceName, apiName,
-                    "일시적 실패가 " + MAX_ATTEMPTS + "회 반복됨 - " + e.getMessage(), e);
-                logger.warn("[{}] {} - 일시적 실패({}/{}): {}", sourceName, apiName, attempt, MAX_ATTEMPTS, e.getMessage());
-                if (attempt < MAX_ATTEMPTS) {
-                    backoff();
+                    "일시적 실패가 " + maxAttempts + "회 반복됨 - " + e.getMessage(), e);
+                logger.warn("[{}] {} - 일시적 실패({}/{}): {}", sourceName, apiName, attempt, maxAttempts, e.getMessage());
+                if (attempt < maxAttempts) {
+                    backoff(retryBackoffMs[attempt - 1]);
                 }
             }
         }
         throw lastFailure;
     }
 
-    private void backoff() {
+    private void backoff(long millis) {
         try {
-            Thread.sleep(RETRY_BACKOFF_MS);
+            Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("재시도 대기 중 인터럽트됨", e);

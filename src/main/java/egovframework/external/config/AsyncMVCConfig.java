@@ -76,6 +76,20 @@ public class AsyncMVCConfig implements WebMvcConfigurer {
     }
 
     /**
+     * 기상청 API 허브(ASOS) 전용 RestTemplate - 공용 {@link #restTemplate}의 read timeout 150초는
+     * 허브가 30초를 붙잡고 504를 내는 장애에서 재시도 여유를 갉아먹는다. 정상 응답은 300ms 안팎이라
+     * 15초면 충분하고, 그 안에 못 받으면 {@code KmaApiHubClient}가 재시도한다.
+     */
+    @Bean
+    public RestTemplate kmaApiHubRestTemplate(RestTemplateBuilder restTemplateBuilder) {
+        return restTemplateBuilder
+        .requestFactory(() -> new BufferingClientHttpRequestFactory(new SimpleClientHttpRequestFactory()))
+        .setConnectTimeout(Duration.ofSeconds(10))
+        .setReadTimeout(Duration.ofSeconds(15))
+        .build();
+    }
+
+    /**
      * 로그 컬렉터(Log Collector) 전용 RestTemplate - 위 공용 {@link #restTemplate}과 별도로 둠.
      * 공용 빈은 {@code SimpleClientHttpRequestFactory}(= JDK {@code HttpURLConnection}) 기반인데,
      * {@code HttpURLConnection}은 PATCH 메서드를 지원하지 않는다("Invalid HTTP method: PATCH"

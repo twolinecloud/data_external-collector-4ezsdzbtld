@@ -4,6 +4,7 @@ import egovframework.external.exception.CollectException;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
@@ -14,7 +15,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -26,6 +29,7 @@ class KmaApiHubClientTest {
 
     private static final Charset CP949 = Charset.forName("CP949");
     private static final String ENDPOINT = "https://apihub.example.invalid/kma_sfctm2.php";
+    private static final String URL = ENDPOINT + "?authKey=test-key&stn=0";
     private static final List<String> FIELDS = List.of("TM", "STN", "HM", "WW", "VS", "IX");
 
     private RestTemplate restTemplate;
@@ -36,7 +40,7 @@ class KmaApiHubClientTest {
     void setUp() {
         restTemplate = new RestTemplate();
         server = MockRestServiceServer.bindTo(restTemplate).build();
-        client = new KmaApiHubClient(restTemplate);
+        client = new KmaApiHubClient(restTemplate, new long[] {0L, 0L}); // 대기 없이 3회 시도
     }
 
     @Test
@@ -126,6 +130,42 @@ class KmaApiHubClientTest {
             client.call("소스", "API", ENDPOINT, "", Map.of(), FIELDS))
             .isInstanceOf(CollectException.class)
             .hasMessageContaining("인증키 설정이 비어있음");
+    }
+
+    @Test
+    void 게이트웨이_504는_재시도해서_성공시킨다() {
+        // 2026-09-21 실측: 허브가 30초를 붙잡고 504를 내던 시각의 바로 다음 시각엔 320ms에 성공했다.
+        server.expect(once(), requestTo(URL)).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        server.expect(once(), requestTo(URL)).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        server.expect(once(), requestTo(URL))
+            .andRespond(withSuccess("202609010700 108 96.0 01   580  1\n".getBytes(CP949), MediaType.TEXT_PLAIN));
+
+        assertThat(call()).hasSize(1);
+        server.verify();
+    }
+
+    @Test
+    void 재시도를_다_써도_실패하면_시도_횟수와_함께_수집_실패로_올린다() {
+        for (int i = 0; i < 3; i++) {
+            server.expect(once(), requestTo(URL)).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        }
+
+        assertThatThrownBy(this::call)
+            .isInstanceOf(CollectException.class)
+            .hasMessageContaining("API 호출 실패(3회 시도)")
+            .hasMessageContaining("504");
+        server.verify();
+    }
+
+    @Test
+    void 요청_오류_4xx는_재시도하지_않는다() {
+        // 인증키 오류 같은 실패는 되풀이해도 그대로다.
+        server.expect(once(), requestTo(URL)).andRespond(withStatus(HttpStatus.FORBIDDEN));
+
+        assertThatThrownBy(this::call)
+            .isInstanceOf(CollectException.class)
+            .hasMessageContaining("요청 오류");
+        server.verify(); // 호출이 정확히 1회였는지 - 재시도하지 않았음을 확인
     }
 
     private void respondWith(String body) {
