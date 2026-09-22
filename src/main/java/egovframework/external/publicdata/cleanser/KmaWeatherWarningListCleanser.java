@@ -1,6 +1,8 @@
 package egovframework.external.publicdata.cleanser;
 
 import egovframework.external.exception.CleanseException;
+import egovframework.external.publicdata.collector.FacilityMasterRecord;
+import egovframework.external.publicdata.collector.FacilityMasterSource;
 import egovframework.external.publicdata.collector.FacilitySido;
 import egovframework.external.publicdata.collector.FacilitySidoLoader;
 import egovframework.external.publicdata.collector.KmaWarningStation;
@@ -16,31 +18,40 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 기상특보목록(getWthrWrnList) 정제기. 응답 자체가 이미 "특보 발표문 1건 = 1행"인
- * 넓은 형태라서 카테고리 피벗은 필요 없지만, {@code stnId}(지점코드)는 시도 단위
- * 관할구역이라 그 자체로는 어느 교정기관 얘기인지 알 수 없다.
+ * 기상특보목록(getWthrWrnList) 정제기.
  *
- * <p>{@link DisasterMsgCleanser}와 동일한 패턴 - {@code stnId}가 관할하는 시도에 속한
- * 교정기관마다 행을 하나씩 복제해서 {@code facilityId}를 채운다({@code KmaWarningStation.covers()},
- * 2026-08-21 추가 - admin-db 테이블에 facility_id가 없어 시설별 매칭이 안 되던 문제 해결).
- * {@code stnId=108}(전국)이면 59개소 전부에 매칭되므로 특보 1건이 최대 59행으로 늘어날 수
- * 있음 - 재난문자와 마찬가지로 조인 없이 "이 시설에 해당하는 특보 목록"을 바로 조회하기
- * 위한 의도적 비정규화.</p>
+ * <p>상세 통보문(getWthrWrnMsg)의 발효 구역(t2, t6) 정보를 바탕으로, {@link KmaWarningAreaMatcher}를
+ * 통해 실제 해당 교정기관의 행정구역(시·도 및 시·군·구)에 해당하는 특보만 선별하여 매칭 적재한다.<br>
+ * 해상 전용 특보(풍랑주의보/경보 등)는 육상 교정시설에 매칭되지 않으며, stnId=108(전국) 특보라도
+ * 본문 구역에 시설 지명이 없으면 매칭에서 제외된다.</p>
  */
 @Component
 public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
 
     private static final Logger logger = LogManager.getLogger(KmaWeatherWarningListCleanser.class);
 
-    /** 실 서비스키 실측(2026-08-12, 24건 전량) 확인된 필드 전체 - 그 밖의 필드는 없었음. */
-    private static final Set<String> RAW_ITEM_FIELDS = Set.of("stnId", "title", "tmFc", "tmSeq");
+    /** 필수 필드 4개 (레거시 및 신규 공통) */
+    private static final Set<String> REQUIRED_FIELDS = Set.of("stnId", "title", "tmFc", "tmSeq");
+    /** 통보문(getWthrWrnMsg) 연동으로 추가될 수 있는 선택 필드 */
+    private static final Set<String> ALL_KNOWN_FIELDS = Set.of(
+        "stnId", "title", "tmFc", "tmSeq", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "warFc"
+    );
 
     private final List<KmaWarningStation> stations;
-    private final FacilitySidoLoader facilitySidoLoader;
+    private final FacilityMasterSource facilityMasterSource;
 
+    public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilityMasterSource facilityMasterSource) {
+        this.stations = stationLoader.all();
+        this.facilityMasterSource = facilityMasterSource;
+    }
+
+    /** 하위 호환용 생성자 (기존 테스트 등 대응) */
     public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilitySidoLoader facilitySidoLoader) {
         this.stations = stationLoader.all();
-        this.facilitySidoLoader = facilitySidoLoader;
+        // FacilitySido 목록을 FacilityMasterRecord로 어댑팅
+        this.facilityMasterSource = () -> facilitySidoLoader.all().stream()
+            .map(s -> new FacilityMasterRecord(s.facilityId(), "", s.sido(), "", "", ""))
+            .toList();
     }
 
     @Override
@@ -50,7 +61,7 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
 
     @Override
     public List<StructureProbe> structureProbes() {
-        return List.of(new StructureProbe("raw-item", RAW_ITEM_FIELDS, RAW_ITEM_FIELDS, StructureProbeSupport::unionKeys));
+        return List.of(new StructureProbe("raw-item", ALL_KNOWN_FIELDS, REQUIRED_FIELDS, StructureProbeSupport::unionKeys));
     }
 
     @Override
@@ -82,17 +93,45 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
             return;
         }
 
-        for (FacilitySido facility : facilitySidoLoader.all()) {
+        String title = item.optString("title", "");
+        String t1 = item.optString("t1", null);
+        String t2 = item.optString("t2", null);
+        String t6 = item.optString("t6", null);
+
+        for (FacilityMasterRecord facility : facilityMasterSource.current()) {
+            // 1. 지점 관할 구역 필터링 (전국이 아닌 지방청인 경우 관할 시도에 속해야 함)
             if (!station.get().covers(facility.sido())) {
                 continue;
             }
+
+            // 2. 통보문 상세 구역 및 해상특보 정밀 매칭
+            if (!KmaWarningAreaMatcher.matches(title, t1, t2, t6, facility)) {
+                continue;
+            }
+
             JSONObject row = new JSONObject();
             row.put("stnId", stnId);
             row.put("title", item.getString("title"));
             row.put("tmFc", item.get("tmFc"));
             row.put("tmSeq", item.get("tmSeq"));
             row.put("facilityId", facility.facilityId());
+
+            copyIfPresent(item, row, "t1");
+            copyIfPresent(item, row, "t2");
+            copyIfPresent(item, row, "t3");
+            copyIfPresent(item, row, "t4");
+            copyIfPresent(item, row, "t5");
+            copyIfPresent(item, row, "t6");
+            copyIfPresent(item, row, "t7");
+            copyIfPresent(item, row, "warFc");
+
             result.put(row);
+        }
+    }
+
+    private void copyIfPresent(JSONObject src, JSONObject dest, String field) {
+        if (src.has(field) && !src.isNull(field)) {
+            dest.put(field, src.get(field));
         }
     }
 }

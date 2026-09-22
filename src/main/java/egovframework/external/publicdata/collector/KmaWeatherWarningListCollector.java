@@ -1,15 +1,22 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 기상청 기상특보 조회서비스(WthrWrnInfoService) - getWthrWrnList(기상특보목록조회).
@@ -55,6 +62,8 @@ public class KmaWeatherWarningListCollector implements PublicDataCollector {
         return "기상특보목록조회";
     }
 
+    private static final Logger logger = LogManager.getLogger(KmaWeatherWarningListCollector.class);
+
     @Override
     public List<String> collect() throws CollectException {
         // Main.java의 JVM 기본 타임존이 Asia/Seoul(KST)라 now()가 곧 한국 날짜 (2026-08-27).
@@ -67,7 +76,74 @@ public class KmaWeatherWarningListCollector implements PublicDataCollector {
         params.put("fromTmFc", today);
         params.put("toTmFc", today);
 
-        return apiClient.call(sourceName(), apiName(), endpoint + "/getWthrWrnList", serviceKey, params);
+        List<String> listItems = apiClient.call(sourceName(), apiName(), endpoint + "/getWthrWrnList", serviceKey, params);
+        if (listItems.isEmpty()) {
+            return listItems;
+        }
+
+        // 목록에 포함된 stnId별로 상세 통보문(getWthrWrnMsg)을 조회하여 (stnId, tmSeq) 기준으로 결합한다.
+        Set<String> stnIds = new HashSet<>();
+        List<JSONObject> items = new ArrayList<>();
+        for (String raw : listItems) {
+            JSONObject obj = new JSONObject(raw);
+            items.add(obj);
+            if (obj.has("stnId")) {
+                stnIds.add(obj.getString("stnId"));
+            }
+        }
+
+        Map<String, JSONObject> msgMap = fetchWarningMessages(stnIds, today);
+
+        List<String> enrichedList = new ArrayList<>();
+        for (JSONObject item : items) {
+            String key = item.optString("stnId") + "_" + item.optInt("tmSeq");
+            JSONObject msg = msgMap.get(key);
+            if (msg != null) {
+                // 상세 통보문 필드 병합 (t1: 제목, t2: 발표구역, t3: 발효시각, t4: 해제예고, t6: 발효구역전체, t7: 예비특보, warFc: 발표구분)
+                copyFieldIfPresent(msg, item, "t1");
+                copyFieldIfPresent(msg, item, "t2");
+                copyFieldIfPresent(msg, item, "t3");
+                copyFieldIfPresent(msg, item, "t4");
+                copyFieldIfPresent(msg, item, "t5");
+                copyFieldIfPresent(msg, item, "t6");
+                copyFieldIfPresent(msg, item, "t7");
+                copyFieldIfPresent(msg, item, "warFc");
+            }
+            enrichedList.add(item.toString());
+        }
+
+        return enrichedList;
+    }
+
+    private Map<String, JSONObject> fetchWarningMessages(Set<String> stnIds, String today) {
+        Map<String, JSONObject> map = new HashMap<>();
+        for (String stnId : stnIds) {
+            Map<String, String> msgParams = new LinkedHashMap<>();
+            msgParams.put("numOfRows", "100");
+            msgParams.put("pageNo", "1");
+            msgParams.put("dataType", "JSON");
+            msgParams.put("fromTmFc", today);
+            msgParams.put("toTmFc", today);
+            msgParams.put("stnId", stnId);
+            try {
+                List<String> msgItems = apiClient.call(sourceName(), "기상특보통보문조회", endpoint + "/getWthrWrnMsg", serviceKey, msgParams);
+                for (String raw : msgItems) {
+                    JSONObject obj = new JSONObject(raw);
+                    String key = obj.optString("stnId") + "_" + obj.optInt("tmSeq");
+                    map.put(key, obj);
+                }
+            } catch (Exception e) {
+                // NO_DATA(결과코드 03) 또는 일시 오류 시 경고 로그 후 목록 원본으로 fallback
+                logger.warn("[{}] 기상특보 통보문 상세 조회 실패(또는 데이터 없음) - stnId={}: {}", key(), stnId, e.getMessage());
+            }
+        }
+        return map;
+    }
+
+    private void copyFieldIfPresent(JSONObject src, JSONObject dest, String field) {
+        if (src.has(field) && !src.isNull(field)) {
+            dest.put(field, src.get(field));
+        }
     }
 
     /**

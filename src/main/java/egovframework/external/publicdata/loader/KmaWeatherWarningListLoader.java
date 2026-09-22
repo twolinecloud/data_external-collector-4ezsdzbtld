@@ -54,12 +54,17 @@ public class KmaWeatherWarningListLoader implements PublicDataLoader {
                 p.put("title", row.getString("title"));
                 p.put("facilityId", row.getString("facilityId"));
                 // raw_json은 "원본 특보 필드 그대로"가 취지 - 우리가 매칭으로 추가한 facilityId는
-                // 여기 안 섞이게 원본 4필드만으로 별도 구성해서 저장한다.
+                // 여기 안 섞이게 원본 필드만으로 구성해서 저장한다 (통보문 상세 필드 포함).
                 JSONObject rawOnly = new JSONObject();
                 rawOnly.put("stnId", row.getString("stnId"));
                 rawOnly.put("title", row.getString("title"));
                 rawOnly.put("tmFc", row.get("tmFc"));
                 rawOnly.put("tmSeq", row.get("tmSeq"));
+                for (String extraKey : new String[]{"t1", "t2", "t3", "t4", "t5", "t6", "t7", "warFc"}) {
+                    if (row.has(extraKey) && !row.isNull(extraKey)) {
+                        rawOnly.put(extraKey, row.get(extraKey));
+                    }
+                }
                 p.put("rawJson", rawOnly.toString());
                 p.put("operationKey", dto.getOperationKey());
                 p.put("collectDtm", dto.getCollectedAt());
