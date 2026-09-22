@@ -52,6 +52,26 @@ class KmaWarningAreaMatcherTest {
     }
 
     @Test
+    void 구역_텍스트가_없는_복합_해상특보는_통보문_조회_실패로_보고_매칭을_보류한다() {
+        // 2026-09-22 실측: getWthrWrnMsg 조회 실패로 t2/t6가 비면(서울동부구치소 문의 원인),
+        // 해상 키워드가 섞인 복합특보는 구역을 모르는 채로 매칭 허용하면 안 된다 - 전부 제외.
+        String title = "[특보] 제09-100호 : 2026.09.21.17:00 / 강풍주의보·풍랑주의보 발표 (*)";
+        String t1 = "강풍주의보·풍랑주의보 발표";
+
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, null, null, seoulDongbu)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, null, null, seoulGuchiso)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, null, null, yeongwol)).isFalse();
+    }
+
+    @Test
+    void 구역_텍스트가_없어도_해상_키워드가_없는_순수_육상특보는_레거시대로_전체_매칭한다() {
+        String title = "[특보] 호우주의보 발표";
+
+        assertThat(KmaWarningAreaMatcher.matches(title, "호우주의보 발표", null, null, seoulDongbu)).isTrue();
+        assertThat(KmaWarningAreaMatcher.matches(title, "호우주의보 발표", null, null, yeongwol)).isTrue();
+    }
+
+    @Test
     void 시군구가_명시된_경우_해당_시군구_시설에만_매칭된다() {
         String title = "[특보] 제08-51호 : 호우주의보 발표";
         String t1 = "호우주의보 발표";

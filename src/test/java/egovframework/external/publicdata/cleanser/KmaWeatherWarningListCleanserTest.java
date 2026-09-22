@@ -52,6 +52,27 @@ class KmaWeatherWarningListCleanserTest {
     }
 
     @Test
+    void 통보문_조회_실패로_구역텍스트가_없는_복합_해상특보는_서울동부구치소에_매칭되지_않는다() throws CleanseException {
+        // 2026-09-22 실측: getWthrWrnMsg 조회 실패로 t2/t6 없이 목록 원본만 온 경우 - 서울동부구치소
+        // 기준 풍랑·강풍주의보가 떴다는 고객 문의의 원인. t2/t6가 없어도(=구역 확인 불가) 해상
+        // 키워드가 섞인 특보는 매칭 보류돼야 한다.
+        String raw = new JSONArray()
+            .put(new JSONObject()
+                .put("title", "[특보] 제09-100호 : 2026.09.21.17:00 / 강풍주의보·풍랑주의보 발표 (*)")
+                .put("stnId", "108")
+                .put("tmFc", 202609211700L)
+                .put("tmSeq", 100))
+            .toString();
+
+        String result = cleanser.cleanse(raw);
+
+        JSONArray rows = new JSONArray(result);
+        for (int i = 0; i < rows.length(); i++) {
+            assertThat(rows.getJSONObject(i).getString("facilityId")).isNotEqualTo("1270801");
+        }
+    }
+
+    @Test
     void stnId_108_순수_풍랑주의보는_전국_어느_교정기관에도_매칭되지_않는다() throws CleanseException {
         // 실제 2026-09-22 06:00 제09-102호 실사례
         String raw = new JSONArray()

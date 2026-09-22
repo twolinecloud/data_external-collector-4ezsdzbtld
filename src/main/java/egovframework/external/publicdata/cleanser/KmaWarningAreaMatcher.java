@@ -52,15 +52,27 @@ public final class KmaWarningAreaMatcher {
             return matchesAreaText(areaText, facility);
         }
 
-        // 3. 통보문 구역 텍스트가 없는 레거시/fallback의 경우 해상 특보가 아니면 true 허용
+        // 3. 통보문 구역 텍스트가 없는 경우(getWthrWrnMsg 조회 실패 포함, 2026-09-22 실측 -
+        // 서울동부구치소에 관할 지역과 무관한 풍랑·강풍 복합특보가 매칭된 고객 문의의 원인). 해상
+        // 키워드가 섞인 복합특보는 구역을 확인 못 한 채로 매칭 허용하면 해상 특보가 내륙 시설에
+        // 다시 새는 원래 버그가 재현되므로, 이번 주기는 매칭을 보류한다(다음 주기 통보문 조회가
+        // 성공하면 정상 매칭됨). 해상 키워드가 아예 없는 순수 육상 특보(호우 등)만 레거시대로
+        // 지점 관할 전체에 매칭 허용한다.
+        if (containsMarineKeyword(combinedTitle)) {
+            return false;
+        }
         return true;
+    }
+
+    private static boolean containsMarineKeyword(String title) {
+        return title.contains("풍랑") || title.contains("폭풍해일");
     }
 
     /**
      * 육상 특보 없이 순수 해상 특보(풍랑, 폭풍해일)만 포함된 제목인지 판별.
      */
     public static boolean isPureMarineWarning(String title) {
-        boolean hasMarine = title.contains("풍랑") || title.contains("폭풍해일");
+        boolean hasMarine = containsMarineKeyword(title);
         if (!hasMarine) {
             return false;
         }
