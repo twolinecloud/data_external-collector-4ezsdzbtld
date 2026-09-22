@@ -3,8 +3,6 @@ package egovframework.external.publicdata.cleanser;
 import egovframework.external.exception.CleanseException;
 import egovframework.external.publicdata.collector.FacilityMasterRecord;
 import egovframework.external.publicdata.collector.FacilityMasterSource;
-import egovframework.external.publicdata.collector.FacilitySido;
-import egovframework.external.publicdata.collector.FacilitySidoLoader;
 import egovframework.external.publicdata.collector.KmaWarningStation;
 import egovframework.external.publicdata.collector.KmaWarningStationLoader;
 import org.apache.logging.log4j.LogManager;
@@ -43,15 +41,6 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
     public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilityMasterSource facilityMasterSource) {
         this.stations = stationLoader.all();
         this.facilityMasterSource = facilityMasterSource;
-    }
-
-    /** 하위 호환용 생성자 (기존 테스트 등 대응) */
-    public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilitySidoLoader facilitySidoLoader) {
-        this.stations = stationLoader.all();
-        // FacilitySido 목록을 FacilityMasterRecord로 어댑팅
-        this.facilityMasterSource = () -> facilitySidoLoader.all().stream()
-            .map(s -> new FacilityMasterRecord(s.facilityId(), "", s.sido(), "", "", ""))
-            .toList();
     }
 
     @Override
