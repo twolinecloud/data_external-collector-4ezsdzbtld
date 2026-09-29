@@ -53,6 +53,14 @@ public class LogCollectorBatchService {
     private static final int STALE_PAGE_SIZE = 200;
     private static final int STALE_MAX_PAGES = 10;
 
+    /**
+     * T6(tb_ext_collect_log) 컬럼 길이 - src_nm varchar(30), api_nm varchar(50)(admin-db 실측
+     * 2026-09-29). bulk 적재라 한 행만 넘쳐도 요청 전체가 거부되는데, 법령명이 긴 11건 때문에
+     * 법령 수집 배치의 T6 491행이 통째로 한 번도 안 들어갔었다 - 보내기 전에 잘라 넣는다.
+     */
+    private static final int T6_SRC_NM_MAX = 30;
+    private static final int T6_API_NM_MAX = 50;
+
     /** operationKey -> jobNm에 쓸 한글 라벨 (private-doc/log-collector-api-spec.md §8). */
     private static final Map<String, String> OPERATION_LABEL = Map.of(
         "kma-village-forecast-ultra-srt-ncst", "초단기실황조회(전 지역)",
@@ -388,8 +396,8 @@ public class LogCollectorBatchService {
             boolean success = r.status() == AttemptStatus.SUCCESS;
             String stsCd = success ? LogCollectorStatus.SUCCESS.name() : LogCollectorStatus.FAIL.name();
             JSONObject item = new JSONObject()
-                .put("srcNm", r.sourceName())
-                .put("apiNm", r.apiName())
+                .put("srcNm", truncate(r.sourceName(), T6_SRC_NM_MAX))
+                .put("apiNm", truncate(r.apiName(), T6_API_NM_MAX))
                 // 레코드 건수(사용자 확정) - 실패 시엔 가져온 레코드가 0이라 "시도 1건"으로 대체
                 .put("targetCnt", success ? r.recordCount() : 1)
                 .put("successCnt", success ? r.recordCount() : 0)
@@ -403,6 +411,14 @@ public class LogCollectorBatchService {
             items.put(item);
         }
         return items;
+    }
+
+    /** {@code max}자(PostgreSQL varchar 기준 = 코드포인트)를 넘으면 끝을 "…"로 바꿔 max자에 맞춘다. */
+    static String truncate(String value, int max) {
+        if (value == null || value.codePointCount(0, value.length()) <= max) {
+            return value;
+        }
+        return value.substring(0, value.offsetByCodePoints(0, max - 1)) + "…";
     }
 
     /** 우리 ExecutionType.SCHEDULE -> 플랫폼 "SCHEDULED" (철자가 다름, §8 주의사항). */

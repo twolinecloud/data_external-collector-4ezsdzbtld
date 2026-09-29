@@ -182,6 +182,33 @@ class LogCollectorBatchServiceTest {
     }
 
     @Test
+    void T6_srcNm_apiNm은_컬럼_길이에_맞춰_잘라_보낸다() {
+        BatchHandle handle = new BatchHandle("exec1", "step1", java.time.LocalDateTime.now(), true);
+        String longApiNm = "법령 본문조회 (법률 제16908호 검찰청법 일부개정법률 및 법률 제16924호 형사소송법 일부개정법률의 시행일에 관한 규정)";
+        String longSrcNm = "공공데이터포털 (한국환경공단 에어코리아) 가나다라마바사아자차";
+
+        service().finishCollectBatch(handle, List.of(
+            new CollectResult("k1", longSrcNm, longApiNm, AttemptStatus.SUCCESS, 1, null),
+            new CollectResult("k2", "국가법령정보센터 (법제처)", "법령 본문조회 (형법)", AttemptStatus.SUCCESS, 1, null)));
+
+        ArgumentCaptor<JSONArray> itemsCaptor = ArgumentCaptor.forClass(JSONArray.class);
+        verify(client).postExternalCollects(eq("exec1"), itemsCaptor.capture());
+        JSONObject cut = itemsCaptor.getValue().getJSONObject(0);
+        assertThat(cut.getString("apiNm")).hasSize(50).startsWith("법령 본문조회 (법률 제16908호").endsWith("…");
+        assertThat(cut.getString("srcNm")).hasSize(30).endsWith("…");
+        JSONObject untouched = itemsCaptor.getValue().getJSONObject(1);
+        assertThat(untouched.getString("apiNm")).isEqualTo("법령 본문조회 (형법)");
+        assertThat(untouched.getString("srcNm")).isEqualTo("국가법령정보센터 (법제처)");
+    }
+
+    @Test
+    void truncate는_경계값과_null을_그대로_둔다() {
+        assertThat(LogCollectorBatchService.truncate(null, 5)).isNull();
+        assertThat(LogCollectorBatchService.truncate("가나다라마", 5)).isEqualTo("가나다라마");
+        assertThat(LogCollectorBatchService.truncate("가나다라마바", 5)).isEqualTo("가나다라…");
+    }
+
+    @Test
     void 전부_성공하면_SUCCESS_전부_실패하면_FAIL로_집계된다() {
         BatchHandle handle = new BatchHandle("exec1", "step1", java.time.LocalDateTime.now(), true);
 
