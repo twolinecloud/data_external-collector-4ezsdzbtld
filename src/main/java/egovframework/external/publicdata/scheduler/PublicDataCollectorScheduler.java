@@ -152,10 +152,10 @@ public class PublicDataCollectorScheduler {
 
     /**
      * operationKey 1틱 = 수집 실행(run) 1개 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소
-     * 순회도 하나). 배치는 열어둔 채 끝나고, 정제·적재가 같은 execId에 단계를 이어붙인다
-     * ({@link PublicDataPipelineRunner} 참고).
+     * 순회도 하나). 수집이 끝나면 곧바로 그 run을 정제·적재까지 진행하며 같은 execId에 단계를
+     * 이어붙인다({@link PublicDataPipelineRunner#collectAndAdvance} 참고).
      */
     private void runAll(String operationKey, List<PublicDataCollector> collectors) {
-        pipelineRunner.collect(operationKey, collectors, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
+        pipelineRunner.collectAndAdvance(operationKey, collectors, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
     }
 }

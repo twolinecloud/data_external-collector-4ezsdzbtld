@@ -14,6 +14,8 @@ import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.staging.StagingRunTracker;
 import egovframework.external.utility.Ulid;
 import lombok.RequiredArgsConstructor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -40,12 +42,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * 처리한다. 이어받기(continue)에 실패하면 그 단계는 새 배치로 기록하고 그 자리에서 닫는다 - 원래
  * 배치가 열린 채 남으면 {@link LogCollectorBatchService#closeStaleBatches}가 정리한다.</p>
  *
+ * <p><b>수집 직후 바로 이어서 처리(2026-09-29)</b>: 스케줄러·수동 트리거는
+ * {@link #collectAndAdvance}로 수집이 끝나자마자 같은 잠금 안에서 그 run을 정제·적재까지 진행한다 -
+ * 5분 주기 정제/적재 스케줄러를 기다리면 admin-db 반영이 최대 10분 늦고, 그동안 배치가 RUNNING으로
+ * 남아 소요시간도 대기시간만큼 부풀었다. 정제/적재 스케줄러({@link #cleanse}/{@link #load})는 적재
+ * 실패 재시도와, 이어서 처리하다 예외가 나 남은 run을 줍는 안전망으로 그대로 둔다.</p>
+ *
  * <p>열린 배치의 진행 상태({@link RunState})는 메모리에만 있다 - raw_staging과 같은 단일 인스턴스
  * 전제이고, 재시작하면 raw_staging 행과 함께 사라진다.</p>
  */
 @Service
 @RequiredArgsConstructor
 public class PublicDataPipelineRunner {
+
+    private static final Logger logger = LogManager.getLogger(PublicDataPipelineRunner.class);
 
     private final PublicDataCollectionAttemptService collectionAttemptService;
     private final PublicDataCleanseService cleanseService;
@@ -73,35 +83,78 @@ public class PublicDataPipelineRunner {
 
     // ── 수집 ──────────────────────────────────────────────
 
-    /** 오퍼레이션 1회 수집(컬렉터가 몇 개든 - 59개소 순회도 run 1개, execId 1개). */
-    public List<CollectResult> collect(String operationKey, List<PublicDataCollector> collectors,
+    /**
+     * 오퍼레이션 1회 수집만 하고 정제·적재는 스케줄러에 맡긴다(컬렉터가 몇 개든 - 59개소 순회도 run 1개,
+     * execId 1개). 운영 경로는 {@link #collectAndAdvance} - 이건 테스트에서 정제 전 상태를 만들 때 쓴다.
+     */
+    List<CollectResult> collect(String operationKey, List<PublicDataCollector> collectors,
             ExecutionType executionType, String triggerBy) {
         String runId = Ulid.generate();
         runTracker.tryAcquire(runId);
         try {
-            BatchHandle handle = logCollectorBatchService.startCollectBatch(operationKey, executionType, triggerBy);
-            String execId = handle.active() ? handle.execId() : null;
+            return collectRun(runId, operationKey, collectors, executionType, triggerBy);
+        } finally {
+            runTracker.release(runId);
+        }
+    }
 
-            List<CollectResult> results = new ArrayList<>(collectors.size());
-            for (PublicDataCollector collector : collectors) {
-                results.add(collectionAttemptService.run(collector, executionType, runId, execId));
-            }
-
-            if (!handle.active()) {
-                return results;
-            }
-            if (cleanseService.peekRun(runId).isEmpty()) {
-                // 넘길 행이 없다(0건 수집 - 특보 없음·NODATA 등, 또는 전부 실패) - 여기서 닫는다.
-                logCollectorBatchService.finishCollectBatch(handle, results);
-                return results;
-            }
-            logCollectorBatchService.finishCollectStepKeepBatchOpen(handle, results);
-            RunState state = new RunState(execId, handle.startedAt());
-            state.worst = collectStatus(results);
-            openRuns.put(runId, state);
+    /**
+     * 수집한 뒤 잠금을 놓지 않고 그 run을 곧바로 정제·적재까지 진행한다 - 스케줄러와 수동 트리거용.
+     * 정제·적재에서 예외가 나도 수집 결과는 그대로 돌려주고, 남은 행은 정제/적재 스케줄러가 줍는다.
+     */
+    public List<CollectResult> collectAndAdvance(String operationKey, List<PublicDataCollector> collectors,
+            ExecutionType executionType, String triggerBy) {
+        String runId = Ulid.generate();
+        runTracker.tryAcquire(runId);
+        try {
+            List<CollectResult> results = collectRun(runId, operationKey, collectors, executionType, triggerBy);
+            advance(runId, operationKey, executionType, triggerBy);
             return results;
         } finally {
             runTracker.release(runId);
+        }
+    }
+
+    private List<CollectResult> collectRun(String runId, String operationKey, List<PublicDataCollector> collectors,
+            ExecutionType executionType, String triggerBy) {
+        BatchHandle handle = logCollectorBatchService.startCollectBatch(operationKey, executionType, triggerBy);
+        String execId = handle.active() ? handle.execId() : null;
+
+        List<CollectResult> results = new ArrayList<>(collectors.size());
+        for (PublicDataCollector collector : collectors) {
+            results.add(collectionAttemptService.run(collector, executionType, runId, execId));
+        }
+
+        if (!handle.active()) {
+            return results;
+        }
+        if (cleanseService.peekRun(runId).isEmpty()) {
+            // 넘길 행이 없다(0건 수집 - 특보 없음·NODATA 등, 또는 전부 실패) - 여기서 닫는다.
+            logCollectorBatchService.finishCollectBatch(handle, results);
+            return results;
+        }
+        logCollectorBatchService.finishCollectStepKeepBatchOpen(handle, results);
+        RunState state = new RunState(execId, handle.startedAt());
+        state.worst = collectStatus(results);
+        openRuns.put(runId, state);
+        return results;
+    }
+
+    /** 잠금을 쥔 run 하나를 정제 → (적재가 켜져 있으면) 적재까지. 로그 컬렉터가 꺼져 있어도 데이터는 진행시킨다. */
+    private void advance(String runId, String operationKey, ExecutionType executionType, String triggerBy) {
+        try {
+            Optional<RawStagingDto> cleanseHead = cleanseService.peekRun(runId);
+            if (cleanseHead.isEmpty()) {
+                return;
+            }
+            cleanseRun(runId, cleanseHead.get(), executionType, triggerBy);
+            if (!loadService.isEnabled()) {
+                return;
+            }
+            loadService.peekRun(runId).ifPresent(head -> loadRun(runId, head, executionType, triggerBy));
+        } catch (RuntimeException e) {
+            logger.warn("[PIPELINE] 수집 직후 정제·적재 중 예외 - 남은 행은 스케줄러가 이어서 처리 operationKey={} runId={}",
+                operationKey, runId, e);
         }
     }
 

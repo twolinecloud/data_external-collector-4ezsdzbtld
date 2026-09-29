@@ -86,7 +86,7 @@ public class PublicDataCollectController {
             PublicDataCollector collector = collectorRegistry.get(key);
 
             // 스케줄과 같은 경로 - 수동 수집도 수집 실행 1회로 정제·적재까지 같은 execId로 이어진다.
-            pipelineRunner.collect(collector.operationKey(), List.of(collector),
+            pipelineRunner.collectAndAdvance(collector.operationKey(), List.of(collector),
                 ExecutionType.MANUAL, "manual-api:" + collector.key());
 
             return Response.of(Map.of(

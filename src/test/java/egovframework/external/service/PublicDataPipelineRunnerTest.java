@@ -133,6 +133,87 @@ class PublicDataPipelineRunnerTest {
         assertThat(r.openRunCount()).isZero();
     }
 
+    // ── 수집 직후 이어서 처리 ─────────────────────────────
+
+    @Test
+    void 수집_직후_같은_run을_정제하고_적재까지_마친_뒤_배치를_닫는다() {
+        PublicDataPipelineRunner r = runner();
+        when(logCollectorBatchService.startCollectBatch(eq(PUBLIC_OP), any(), any())).thenReturn(handle("exec-1", "exec-101"));
+        when(collectionAttemptService.run(any(), any(), anyString(), eq("exec-1"))).thenReturn(ok());
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.of(row("x", PUBLIC_OP, "exec-1")));
+        BatchHandle cleanseStep = handle("exec-1", "exec-102");
+        BatchHandle loadStep = handle("exec-1", "exec-103");
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-1")).thenReturn(Optional.of(cleanseStep));
+        when(logCollectorBatchService.continueBatchWithLoadStep("exec-1")).thenReturn(Optional.of(loadStep));
+        when(cleanseService.cleanseRun(anyString())).thenReturn(new CleanseResult(1, 1, 0));
+        when(loadService.isEnabled()).thenReturn(true);
+        when(loadService.peekRun(anyString())).thenReturn(Optional.of(row("x", PUBLIC_OP, "exec-1")));
+        when(loadService.loadRun(anyString())).thenReturn(new LoadResult(59, 59, 0));
+        when(loadService.hasPendingRetry(anyString())).thenReturn(false);
+
+        r.collectAndAdvance(PUBLIC_OP, List.of(collectorA), ExecutionType.SCHEDULE, "scheduler:" + PUBLIC_OP);
+
+        ArgumentCaptor<String> runId = ArgumentCaptor.forClass(String.class);
+        verify(collectionAttemptService).run(any(), any(), runId.capture(), eq("exec-1"));
+        verify(cleanseService).cleanseRun(runId.getValue());
+        verify(loadService).loadRun(runId.getValue());
+        verify(logCollectorBatchService).finishCleanseStepKeepBatchOpen(cleanseStep, new CleanseResult(1, 1, 0));
+        verify(logCollectorBatchService).finishLoadStepKeepBatchOpen(loadStep, new LoadResult(59, 59, 0));
+        verify(logCollectorBatchService).closeBatch(eq("exec-1"), any(), eq(LogCollectorStatus.SUCCESS), eq(59), eq(59), eq(0));
+        assertThat(r.openRunCount()).isZero();
+        assertThat(tracker.tryAcquire(runId.getValue())).isTrue();
+    }
+
+    @Test
+    void 법령은_수집_직후_정제에서_배치를_닫는다() {
+        PublicDataPipelineRunner r = runner();
+        when(logCollectorBatchService.startCollectBatch(eq(LAW_OP), any(), any())).thenReturn(handle("exec-law", "exec-law01"));
+        when(collectionAttemptService.run(any(), any(), anyString(), eq("exec-law"))).thenReturn(ok());
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.of(row("x", LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        when(cleanseService.cleanseRun(anyString())).thenReturn(new CleanseResult(1, 1, 0));
+        when(loadService.isEnabled()).thenReturn(false);
+
+        r.collectAndAdvance(LAW_OP, List.of(collectorA), ExecutionType.MANUAL, "manual-api:" + LAW_OP);
+
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.SUCCESS), eq(1), eq(1), eq(0));
+        verify(loadService, never()).loadRun(any());
+        assertThat(r.openRunCount()).isZero();
+    }
+
+    @Test
+    void 로그컬렉터가_꺼져있어도_수집_직후_정제는_진행된다() {
+        when(logCollectorBatchService.startCollectBatch(any(), any(), any())).thenReturn(BatchHandle.inactive());
+        when(collectionAttemptService.run(any(), any(), anyString(), eq(null))).thenReturn(ok());
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.of(row("x", PUBLIC_OP, null)));
+        when(logCollectorBatchService.startCleanseBatch(any(), any(), any())).thenReturn(BatchHandle.inactive());
+        when(cleanseService.cleanseRun(anyString())).thenReturn(new CleanseResult(1, 1, 0));
+        when(loadService.isEnabled()).thenReturn(false);
+
+        runner().collectAndAdvance(PUBLIC_OP, List.of(collectorA), ExecutionType.SCHEDULE, "scheduler:" + PUBLIC_OP);
+
+        verify(cleanseService).cleanseRun(anyString());
+    }
+
+    @Test
+    void 이어서_처리하다_예외가_나도_수집_결과는_돌려주고_잠금과_배치는_남겨_스케줄러에_맡긴다() {
+        PublicDataPipelineRunner r = runner();
+        when(logCollectorBatchService.startCollectBatch(eq(PUBLIC_OP), any(), any())).thenReturn(handle("exec-1", "exec-101"));
+        when(collectionAttemptService.run(any(), any(), anyString(), eq("exec-1"))).thenReturn(ok());
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.of(row("x", PUBLIC_OP, "exec-1")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-1")).thenReturn(Optional.of(handle("exec-1", "exec-102")));
+        when(cleanseService.cleanseRun(anyString())).thenThrow(new IllegalStateException("정제 중 오류"));
+
+        List<CollectResult> results = r.collectAndAdvance(PUBLIC_OP, List.of(collectorA), ExecutionType.SCHEDULE, "scheduler:" + PUBLIC_OP);
+
+        assertThat(results).containsExactly(ok());
+        verify(logCollectorBatchService, never()).closeBatch(any(), any(), any(), anyInt(), anyInt(), anyInt());
+        assertThat(r.openRunCount()).isEqualTo(1); // 다음 정제 주기가 같은 execId로 이어받는다
+        ArgumentCaptor<String> runId = ArgumentCaptor.forClass(String.class);
+        verify(collectionAttemptService).run(any(), any(), runId.capture(), eq("exec-1"));
+        assertThat(tracker.tryAcquire(runId.getValue())).isTrue(); // 잠금은 풀린다
+    }
+
     // ── 정제 ──────────────────────────────────────────────
 
     @Test
