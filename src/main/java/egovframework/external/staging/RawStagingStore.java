@@ -50,6 +50,17 @@ public interface RawStagingStore {
      */
     List<RawStagingDto> findByStatus(String status, int limit, Set<String> operationKeys, boolean exclude);
 
+    /**
+     * 특정 상태로 대기 중인 행들의 {@link RawStagingDto#collectRunId}를 수집 시각이 오래된 순으로
+     * 중복 없이 반환 - 정제·적재가 "수집 실행 1회" 단위로 처리할 대상을 고르는 데 쓴다
+     * (2026-09-29). 하드코딩된 오퍼레이션 목록이 필요 없어 새 오퍼레이션을 추가해도 따로 등록할
+     * 곳이 없다. collectRunId가 없는 행은 제외된다.
+     */
+    List<String> pendingRunIds(String status);
+
+    /** 특정 수집 실행(collectRunId)에 속한 특정 상태의 행을 오래된 순으로 최대 limit 건. */
+    List<RawStagingDto> findByStatusAndRunId(String status, int limit, String collectRunId);
+
     /** 정제 성공: cleansedPayload 채우고 status=CLEANSED, processedBatchId 기록. */
     void markCleansed(Long id, String cleansedPayload, String processedBatchId);
 

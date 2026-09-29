@@ -281,6 +281,40 @@ class InMemoryRawStagingStoreTest {
         assertThat(store.findByStatus("LOADED", 100, Set.of(), false)).isEmpty();
     }
 
+    @Test
+    void pendingRunIds는_상태가_맞는_행의_runId를_오래된_순으로_중복없이_반환한다() {
+        store.insert(runDto("run-A", "k1"));
+        store.insert(runDto("run-B", "k2"));
+        store.insert(runDto("run-A", "k3"));
+        RawStagingDto noRun = dto("kma-weather-warning-list", "k4");
+        store.insert(noRun);
+
+        assertThat(store.pendingRunIds("COLLECTED")).containsExactly("run-A", "run-B");
+        assertThat(store.pendingRunIds("CLEANSED")).isEmpty();
+    }
+
+    @Test
+    void findByStatusAndRunId는_그_run의_해당_상태_행만_반환한다() {
+        RawStagingDto a1 = runDto("run-A", "k1");
+        RawStagingDto a2 = runDto("run-A", "k2");
+        store.insert(a1);
+        store.insert(a2);
+        store.insert(runDto("run-B", "k3"));
+        store.markCleansed(a2.getId(), "[]", null);
+
+        assertThat(store.findByStatusAndRunId("COLLECTED", 100, "run-A"))
+            .extracting(RawStagingDto::getId).containsExactly(a1.getId());
+        assertThat(store.findByStatusAndRunId("CLEANSED", 100, "run-A"))
+            .extracting(RawStagingDto::getId).containsExactly(a2.getId());
+        assertThat(store.findByStatusAndRunId("COLLECTED", 100, "run-C")).isEmpty();
+    }
+
+    private RawStagingDto runDto(String runId, String collectorKey) {
+        RawStagingDto dto = dto("kma-village-forecast-vilage-fcst", collectorKey);
+        dto.setCollectRunId(runId);
+        return dto;
+    }
+
     private RawStagingDto dto(String operationKey) {
         return dto(operationKey, null);
     }

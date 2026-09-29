@@ -54,6 +54,23 @@ class LogCollectorClientTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void listBatches는_본문_없는_GET으로_조회하고_result_페이지를_돌려준다() {
+        String query = "stsCd=RUNNING&size=200&page=0";
+        when(restTemplate.exchange(eq(URI.create(BASE_URL + "/api/v1/logs/batches?" + query)), eq(HttpMethod.GET), any(), eq(String.class)))
+            .thenReturn(ResponseEntity.ok("{\"result\":{\"content\":[{\"execId\":\"20260929PUB001\"}],\"totalPages\":1}}"));
+
+        Optional<JSONObject> page = client(true).listBatches(query);
+
+        assertThat(page).isPresent();
+        assertThat(page.get().getJSONArray("content").getJSONObject(0).getString("execId")).isEqualTo("20260929PUB001");
+        ArgumentCaptor<HttpEntity<String>> entity = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(any(URI.class), eq(HttpMethod.GET), entity.capture(), eq(String.class));
+        // GET에 본문이 실리면 HttpURLConnection이 POST로 바꿔 보낸다
+        assertThat(entity.getValue().getBody()).isNull();
+    }
+
+    @Test
     void createBatch_성공시_execId를_반환한다() {
         when(restTemplate.exchange(eq(URI.create(BASE_URL + "/api/v1/logs/batches")), eq(HttpMethod.POST), any(), eq(String.class)))
             .thenReturn(ResponseEntity.ok("{\"success\":true,\"result\":{\"execId\":\"20260820EXT001\"}}"));

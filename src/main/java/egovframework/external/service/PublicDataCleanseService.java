@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -45,27 +44,35 @@ public class PublicDataCleanseService {
     private final JsonStructureDriftDetector structureDriftDetector;
 
     /**
-     * COLLECTED 상태 전체를 다 뺄 때까지 반복 처리. 각 행은 처리 후 상태가 바뀌므로 자연 종료됨.
-     *
-     * @return 총/성공/실패 건수 - 로그 컬렉터 연동(배치 종료 보고)에 성공/실패 분리가 필요해
-     *         기존 {@code int}(총건수만)에서 확장됨. 기존 호출부는 {@code totalProcessed()}로
-     *         그대로 쓸 수 있다.
+     * 정제 대기(COLLECTED) 행이 있는 수집 실행(collectRunId) 목록, 오래된 순 - 정제는 수집 실행
+     * 1회 단위로 처리한다(2026-09-29, {@code PublicDataPipelineRunner} 참고).
      */
-    public CleanseResult cleanseAllPending() {
-        return cleansePending(Set.of(), false);
+    public List<String> pendingRunIds() {
+        return rawStagingStore.pendingRunIds("COLLECTED");
     }
 
     /**
-     * operationKey로 걸러서 COLLECTED 상태를 처리 - 로그 컬렉터 배치를 EXTERNAL_PUBLIC/
-     * EXTERNAL_LAW로 나눠 보고하기 위해 도입(2026-08-27, {@code PublicDataCleanseScheduler}
-     * 참고). {@code operationKeys}가 비어있으면 {@link #cleanseAllPending()}과 동일.
+     * 그 수집 실행의 대기 행 하나를 소모하지 않고 들여다본다 - 배치를 시작하기 전에 카테고리와
+     * origin execId를 알아야 해서. {@link RawStagingStore#findByStatusAndRunId}는 상태를 바꾸지
+     * 않는 순수 조회다.
      */
-    public CleanseResult cleansePending(Set<String> operationKeys, boolean exclude) {
+    public Optional<RawStagingDto> peekRun(String collectRunId) {
+        List<RawStagingDto> peek = rawStagingStore.findByStatusAndRunId("COLLECTED", 1, collectRunId);
+        return peek.isEmpty() ? Optional.empty() : Optional.of(peek.get(0));
+    }
+
+    /**
+     * 그 수집 실행의 COLLECTED 행을 다 뺄 때까지 반복 처리. 각 행은 처리 후 상태가 바뀌므로 자연
+     * 종료됨.
+     *
+     * @return 총/성공/실패 건수 - 로그 컬렉터 배치 종료 보고용
+     */
+    public CleanseResult cleanseRun(String collectRunId) {
         int totalProcessed = 0;
         int successCount = 0;
         int failCount = 0;
         List<RawStagingDto> batch;
-        while (!(batch = rawStagingStore.findByStatus("COLLECTED", BATCH_SIZE, operationKeys, exclude)).isEmpty()) {
+        while (!(batch = rawStagingStore.findByStatusAndRunId("COLLECTED", BATCH_SIZE, collectRunId)).isEmpty()) {
             for (RawStagingDto dto : batch) {
                 boolean success = cleanseOne(dto);
                 totalProcessed++;
@@ -100,7 +107,8 @@ public class PublicDataCleanseService {
             jsonDropWriter.write(dto.getCollectorKey(), cleansedPayload);
             recordAttempt(operationKey, "SUCCESS");
             PipelineLogUtils.info(logger, STAGE, dto.getSourceName(), dto.getApiName(),
-                "raw_staging id=" + dto.getId() + " 정제 완료 (" + tookMs + "ms)");
+                "raw_staging id=" + dto.getId() + " 정제 완료 (" + tookMs + "ms, runId="
+                    + dto.getCollectRunId() + ", execId=" + dto.getOriginExecId() + ")");
             return true;
         } catch (CleanseException e) {
             fail(dto, sample, operationKey, e.getMessage(), e);

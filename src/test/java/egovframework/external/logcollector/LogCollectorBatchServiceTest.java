@@ -292,4 +292,204 @@ class LogCollectorBatchServiceTest {
         verify(client, never()).finishStep(any(), any());
         verify(client, never()).finishBatch(any(), any());
     }
+
+    @Test
+    void continueBatchWithCleanseStep은_createBatch_없이_기존_execId에_stepSeq2로_스텝만_추가한다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createStep(eq("20260928EXT001"), any())).thenReturn(Optional.of("20260928EXT00102"));
+
+        Optional<BatchHandle> handle = service().continueBatchWithCleanseStep("20260928EXT001");
+
+        assertThat(handle).isPresent();
+        assertThat(handle.get().execId()).isEqualTo("20260928EXT001");
+        assertThat(handle.get().stepLogId()).isEqualTo("20260928EXT00102");
+        verify(client, never()).createBatch(any());
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createStep(eq("20260928EXT001"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getInt("stepSeq")).isEqualTo(2);
+        assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("CLEANSE");
+    }
+
+    @Test
+    void continueBatchWithCleanseStep은_비활성화_상태면_빈값을_반환하고_아무_호출도_안한다() {
+        when(client.isEnabled()).thenReturn(false);
+
+        Optional<BatchHandle> handle = service().continueBatchWithCleanseStep("exec1");
+
+        assertThat(handle).isEmpty();
+        verify(client, never()).createStep(any(), any());
+    }
+
+    @Test
+    void continueBatchWithCleanseStep은_스텝생성_실패시_빈값을_반환한다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createStep(eq("exec1"), any())).thenReturn(Optional.empty());
+
+        Optional<BatchHandle> handle = service().continueBatchWithCleanseStep("exec1");
+
+        assertThat(handle).isEmpty();
+        // 배치 자체를 새로 만든 게 아니므로, 실패해도 finishBatch(FAIL)로 마감하지 않는다 -
+        // 호출부가 새 배치로 fallback하는 게 맞다.
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void finishCollectStepKeepBatchOpen은_step과_T6는_종료하되_배치는_닫지_않는다() {
+        BatchHandle handle = new BatchHandle("exec1", "step1", java.time.LocalDateTime.now(), true);
+        List<CollectResult> results = List.of(
+            new CollectResult("k1", "src1", "api1", AttemptStatus.SUCCESS, 491, null));
+
+        service().finishCollectStepKeepBatchOpen(handle, results);
+
+        verify(client).postExternalCollects(eq("exec1"), any());
+        verify(client).finishStep(eq("step1"), any());
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void finishCollectStepKeepBatchOpen은_비활성_핸들이면_아무_호출도_안한다() {
+        BatchHandle inactive = BatchHandle.inactive();
+
+        service().finishCollectStepKeepBatchOpen(inactive, List.of());
+
+        verify(client, never()).postExternalCollects(any(), any());
+        verify(client, never()).finishStep(any(), any());
+    }
+
+    @Test
+    void continueBatchWithLoadStep은_createBatch_없이_기존_execId에_stepSeq3_STORE로_스텝만_추가한다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createStep(eq("20260929EXT001"), any())).thenReturn(Optional.of("20260929EXT00103"));
+
+        Optional<BatchHandle> handle = service().continueBatchWithLoadStep("20260929EXT001");
+
+        assertThat(handle).isPresent();
+        assertThat(handle.get().execId()).isEqualTo("20260929EXT001");
+        assertThat(handle.get().stepLogId()).isEqualTo("20260929EXT00103");
+        verify(client, never()).createBatch(any());
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createStep(eq("20260929EXT001"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getInt("stepSeq")).isEqualTo(3);
+        assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("STORE");
+    }
+
+    @Test
+    void continueBatchWithLoadStep은_비활성화_상태면_빈값을_반환한다() {
+        when(client.isEnabled()).thenReturn(false);
+
+        Optional<BatchHandle> handle = service().continueBatchWithLoadStep("exec1");
+
+        assertThat(handle).isEmpty();
+        verify(client, never()).createStep(any(), any());
+    }
+
+    @Test
+    void continueBatchWithLoadStep은_스텝생성_실패시_빈값을_반환한다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createStep(eq("exec1"), any())).thenReturn(Optional.empty());
+
+        Optional<BatchHandle> handle = service().continueBatchWithLoadStep("exec1");
+
+        assertThat(handle).isEmpty();
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void finishCleanseStepKeepBatchOpen은_step만_종료하고_배치는_닫지_않는다() {
+        BatchHandle handle = new BatchHandle("exec1", "step1", java.time.LocalDateTime.now(), true);
+
+        service().finishCleanseStepKeepBatchOpen(handle, new CleanseResult(10, 9, 1));
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishStep(eq("step1"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getInt("inCnt")).isEqualTo(10);
+        assertThat(stepCaptor.getValue().getInt("outCnt")).isEqualTo(9);
+        assertThat(stepCaptor.getValue().getInt("errCnt")).isEqualTo(1);
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void finishCleanseStepKeepBatchOpen은_비활성_핸들이면_아무_호출도_안한다() {
+        BatchHandle inactive = BatchHandle.inactive();
+
+        service().finishCleanseStepKeepBatchOpen(inactive, new CleanseResult(0, 0, 0));
+
+        verify(client, never()).finishStep(any(), any());
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void finishLoadStepKeepBatchOpen은_step만_종료하고_배치는_닫지_않는다() {
+        BatchHandle handle = new BatchHandle("exec1", "exec103", java.time.LocalDateTime.now(), true);
+
+        service().finishLoadStepKeepBatchOpen(handle, new LoadResult(59, 58, 1));
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishStep(eq("exec103"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getString("stepStsCd")).isEqualTo("PARTIAL");
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void closeBatch는_넘겨받은_최종_상태와_건수로_배치를_닫는다() {
+        when(client.isEnabled()).thenReturn(true);
+
+        service().closeBatch("exec1", java.time.LocalDateTime.now().minusMinutes(10),
+            LogCollectorStatus.PARTIAL, 59, 59, 0);
+
+        ArgumentCaptor<JSONObject> body = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishBatch(eq("exec1"), body.capture());
+        // 건수로는 SUCCESS지만 앞 단계(예: 수집 PARTIAL)를 반영한 상태가 그대로 나가야 한다
+        assertThat(body.getValue().getString("execStsCd")).isEqualTo("PARTIAL");
+        assertThat(body.getValue().getInt("successCnt")).isEqualTo(59);
+        assertThat(body.getValue().getLong("elapsedSec")).isGreaterThanOrEqualTo(600);
+    }
+
+    @Test
+    void closeStaleBatches는_기준보다_오래된_우리_RUNNING_배치만_FAIL로_닫는다() {
+        when(client.isEnabled()).thenReturn(true);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        JSONArray content = new JSONArray()
+            .put(listRow("old-ours", "EXTERNAL_API", now.minusHours(5)))
+            .put(listRow("recent-ours", "EXTERNAL_API", now.minusMinutes(30)))
+            .put(listRow("old-test", "TEST_EXTERNAL", now.minusHours(5)));
+        when(client.listBatches(org.mockito.ArgumentMatchers.contains("page=0")))
+            .thenReturn(Optional.of(new JSONObject().put("content", content).put("totalPages", 1)));
+
+        int closed = service().closeStaleBatches(java.time.Duration.ofHours(3));
+
+        assertThat(closed).isEqualTo(1);
+        ArgumentCaptor<JSONObject> body = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishBatch(eq("old-ours"), body.capture());
+        assertThat(body.getValue().getString("execStsCd")).isEqualTo("FAIL");
+        assertThat(body.getValue().getString("errTypeCd")).isEqualTo("SYSTEM");
+        verify(client, never()).finishBatch(eq("recent-ours"), any());
+        verify(client, never()).finishBatch(eq("old-test"), any());
+    }
+
+    @Test
+    void closeStaleBatches는_조회가_실패하면_아무것도_닫지_않는다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.listBatches(anyString())).thenReturn(Optional.empty());
+
+        assertThat(service().closeStaleBatches(java.time.Duration.ofHours(3))).isZero();
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void worst는_더_나쁜_상태를_고른다() {
+        assertThat(LogCollectorStatus.worst(LogCollectorStatus.SUCCESS, LogCollectorStatus.PARTIAL))
+            .isEqualTo(LogCollectorStatus.PARTIAL);
+        assertThat(LogCollectorStatus.worst(LogCollectorStatus.PARTIAL, LogCollectorStatus.FAIL))
+            .isEqualTo(LogCollectorStatus.FAIL);
+        assertThat(LogCollectorStatus.worst(null, LogCollectorStatus.SUCCESS))
+            .isEqualTo(LogCollectorStatus.SUCCESS);
+    }
+
+    private static JSONObject listRow(String execId, String jobId, java.time.LocalDateTime startDtm) {
+        return new JSONObject().put("execId", execId).put("jobId", jobId)
+            .put("execStsCd", "RUNNING").put("startDtm", startDtm.withNano(0).toString());
+    }
 }

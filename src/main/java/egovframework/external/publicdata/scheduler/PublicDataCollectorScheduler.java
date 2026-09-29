@@ -1,9 +1,7 @@
 package egovframework.external.publicdata.scheduler;
 
-import egovframework.external.logcollector.BatchHandle;
 import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
-import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.publicdata.collector.AirKoreaDustForecastCollector;
 import egovframework.external.publicdata.collector.AirKoreaRealtimeCollector;
@@ -15,11 +13,11 @@ import egovframework.external.publicdata.collector.LivingWthrIdxCollectorFactory
 import egovframework.external.publicdata.collector.MolegLawCollectorFactory;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.service.PublicDataCollectionAttemptService;
+import egovframework.external.service.PublicDataPipelineRunner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,7 +46,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PublicDataCollectorScheduler {
 
-    private final PublicDataCollectionAttemptService collectionAttemptService;
+    private final PublicDataPipelineRunner pipelineRunner;
     private final KmaLocationCollectorFactory locationCollectorFactory;
     private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
     private final KmaAsosHourlyCollector kmaAsosHourlyCollector;
@@ -57,7 +55,6 @@ public class PublicDataCollectorScheduler {
     private final MolegLawCollectorFactory lawCollectorFactory;
     private final DisasterMsgCollector disasterMsgCollector;
     private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
-    private final LogCollectorBatchService logCollectorBatchService;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-ncst.cron:0 12 * * * *}")
@@ -120,6 +117,9 @@ public class PublicDataCollectorScheduler {
      * 여기선 배치 1개로 충분 - {@link DataTypeClassifier} 참고). 변경감지/이력누적은 아직
      * 여기서 안 함(admin-db 쓰기 경로 확정 대기, private-doc 31번 항목) - 지금은 매번 전체를
      * raw_staging에 새로 적재하기만 함.
+     *
+     * <p>로그 컬렉터에는 COLLECT→CLEANSE 두 단계만 남는다 - 적재기가 없어 정제에서 배치를 닫는다
+     * ({@link PublicDataPipelineRunner} 참고).</p>
      */
     @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
     public void collectMolegCriminalLaws() {
@@ -150,16 +150,12 @@ public class PublicDataCollectorScheduler {
         runAll("kma-living-air-diffusion-idx", livingWthrIdxCollectorFactory.airDiffusionIdxCollectors());
     }
 
-    /** operationKey 1틱 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소 순회도 배치 하나). */
+    /**
+     * operationKey 1틱 = 수집 실행(run) 1개 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소
+     * 순회도 하나). 배치는 열어둔 채 끝나고, 정제·적재가 같은 execId에 단계를 이어붙인다
+     * ({@link PublicDataPipelineRunner} 참고).
+     */
     private void runAll(String operationKey, List<PublicDataCollector> collectors) {
-        BatchHandle handle = logCollectorBatchService.startCollectBatch(
-            operationKey, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
-
-        List<CollectResult> results = new ArrayList<>(collectors.size());
-        for (PublicDataCollector collector : collectors) {
-            results.add(collectionAttemptService.run(collector, ExecutionType.SCHEDULE));
-        }
-
-        logCollectorBatchService.finishCollectBatch(handle, results);
+        pipelineRunner.collect(operationKey, collectors, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
     }
 }

@@ -250,3 +250,9 @@ public-data:
 log-collector:
   enabled: ${LOG_COLLECTOR_ENABLED:false}
   base-url: ${LOG_COLLECTOR_BASE_URL:https://kcais-admin.twolinecloud.com/logc}
+  # 오래 열린 배치 자동 종료(LogCollectorStaleBatchScheduler) - 재시작 등으로 이어받을 처리가
+  # 사라진 배치를 FAIL로 닫는다. 기준은 정상 흐름(법령 수집 최대 약 40분 + 적재 재시도 약 15분)보다
+  # 충분히 길게.
+  stale-batch:
+    threshold: 3h
+    cron: "0 7/30 * * * *"

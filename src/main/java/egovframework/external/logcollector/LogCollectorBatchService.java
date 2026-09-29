@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,10 +24,11 @@ import java.util.Optional;
  * 로그 컬렉터(Log Collector) 배치/단계 생명주기 오케스트레이션. 실행 설계 확정본은
  * private-doc/log-collector-api-spec.md §8 참고 - 이 클래스는 그 설계를 코드로 옮긴 것.
  *
- * <p><b>배치 경계</b>: Collect 스케줄러(또는 수동 트리거)의 오퍼레이션 1틱 = 배치 1개.
- * Cleanse 스케줄러(또는 수동 트리거) 1틱 = 별도의 배치 1개. 우리 구조상 Cleanse 한 번이
- * 여러 Collect 배치의 결과를 오퍼레이션 구분 없이 한꺼번에 처리하기 때문에 서로 연결하지
- * 않는다(§8 근거 참고).</p>
+ * <p><b>배치 경계(2026-09-29 변경)</b>: 수집 실행 1회 = 배치(execId) 1개이고, 그 수집의 정제·적재가
+ * 같은 execId에 CLEANSE·STORE 스텝을 이어붙인다(법령은 적재 단계 없이 정제에서 닫음). 예전(§8)엔
+ * 정제가 여러 수집 결과를 한꺼번에 처리해서 단계마다 별도 배치를 썼는데, 정제·적재를 수집 실행
+ * 단위로 바꾸면서 연결했다 - 흐름 제어는 {@code PublicDataPipelineRunner}. 이어받기에 실패하면
+ * 기존처럼 그 단계만의 새 배치({@link #startCleanseBatch}/{@link #startLoadBatch})로 남긴다.</p>
  *
  * <p><b>건수 집계 방식이 T6(항목)와 T1/T2(배치/단계)에서 다르다</b> - 사용자 확정(2026-08-20)은
  * "T6의 targetCnt/successCnt = 레코드 건수"였다. 이걸 그대로 배치/단계 레벨에도 적용하면
@@ -46,6 +48,10 @@ public class LogCollectorBatchService {
     private static final String STEP_CLEANSE = "CLEANSE";
     // C05 공통코드 stepTypeCd(COLLECT/CLEANSE/ANALYZE/DEIDENT/STORE/SEND) 중 적재는 STORE에 대응.
     private static final String STEP_STORE = "STORE";
+
+    private static final int STALE_LOOKBACK_DAYS = 7;
+    private static final int STALE_PAGE_SIZE = 200;
+    private static final int STALE_MAX_PAGES = 10;
 
     /** operationKey -> jobNm에 쓸 한글 라벨 (private-doc/log-collector-api-spec.md §8). */
     private static final Map<String, String> OPERATION_LABEL = Map.of(
@@ -129,6 +135,166 @@ public class LogCollectorBatchService {
         finish(handle, result.totalProcessed(), result.successCount(), result.failCount());
     }
 
+    /**
+     * 이미 열려있는 배치(execId)에 CLEANSE 스텝만 추가한다. collect가
+     * {@link #finishCollectStepKeepBatchOpen}으로 배치를 안 닫고 남겨뒀을 때 정제가 같은 execId에
+     * 이어붙이는 데 쓴다({@code PublicDataPipelineRunner} 참고). 보내는 stepSeq는 참고값일 뿐이고
+     * 로그 컬렉터 서버가 dataType별 체인 위치로 순번을 다시 매긴다.
+     *
+     * @return 성공하면 같은 execId를 담은 새 {@link BatchHandle}. step 생성에 실패하면(플랫폼이
+     *         거부했거나 네트워크 오류) 호출부가 새 배치로 안전하게 degrade할 수 있도록 빈 값.
+     */
+    public Optional<BatchHandle> continueBatchWithCleanseStep(String execId) {
+        return continueBatchWithStep(execId, 2, STEP_CLEANSE);
+    }
+
+    /**
+     * 이미 열려있는 배치(execId)에 STORE(적재) 스텝만 추가한다 - PUBLIC 10종 전용(2026-09-29).
+     * cleanse가 {@link #finishCleanseStepKeepBatchOpen}으로 배치를 안 닫고 남겨뒀을 때, 뒤이은
+     * load가 같은 execId 아래 stepSeq=3으로 이어붙이기 위해 쓴다. LAW는 cleanse에서 체인이
+     * 끝나므로(로더 없음) 이 메서드를 쓰지 않는다.
+     */
+    public Optional<BatchHandle> continueBatchWithLoadStep(String execId) {
+        return continueBatchWithStep(execId, 3, STEP_STORE);
+    }
+
+    private Optional<BatchHandle> continueBatchWithStep(String execId, int stepSeq, String stepTypeCd) {
+        if (!client.isEnabled()) {
+            return Optional.empty();
+        }
+        LocalDateTime now = LocalDateTime.now();
+        JSONObject stepBody = new JSONObject()
+            .put("stepSeq", stepSeq)
+            .put("stepTypeCd", stepTypeCd)
+            .put("startDtm", DTM.format(now));
+        Optional<String> stepLogId = client.createStep(execId, stepBody);
+        if (stepLogId.isEmpty()) {
+            logger.warn("[LOG-COLLECTOR] 기존 배치(execId={})에 {} step 추가 실패 - 새 배치로 대체됨", execId, stepTypeCd);
+            return Optional.empty();
+        }
+        return Optional.of(new BatchHandle(execId, stepLogId.get(), now, true));
+    }
+
+    /**
+     * Collect 스텝만 종료하고 배치(execId) 자체는 RUNNING 상태로 열어둔다 - LAW 전용.
+     * {@link #continueBatchWithCleanseStep}으로 이어붙인 cleanse가 {@link #finishCleanseBatch}를
+     * 호출할 때 비로소 배치가 최종 종료된다.
+     */
+    public void finishCollectStepKeepBatchOpen(BatchHandle handle, List<CollectResult> results) {
+        if (!handle.active()) {
+            return;
+        }
+        if (!results.isEmpty()) {
+            client.postExternalCollects(handle.execId(), toExternalCollects(results));
+        }
+        int successCount = (int) results.stream().filter(r -> r.status() == AttemptStatus.SUCCESS).count();
+        finish(handle, results.size(), successCount, results.size() - successCount, false);
+    }
+
+    /**
+     * Cleanse 스텝만 종료하고 배치(execId) 자체는 RUNNING 상태로 열어둔다 - PUBLIC 전용
+     * (2026-09-29). 뒤이은 load가 {@link #continueBatchWithLoadStep}으로 이어붙이고
+     * {@link #finishLoadBatch}를 호출할 때 비로소 배치가 최종 종료된다. LAW는 cleanse에서
+     * 체인이 끝나므로 기존 {@link #finishCleanseBatch}(배치를 닫음)를 그대로 쓴다.
+     */
+    public void finishCleanseStepKeepBatchOpen(BatchHandle handle, CleanseResult result) {
+        if (!handle.active()) {
+            return;
+        }
+        finish(handle, result.totalProcessed(), result.successCount(), result.failCount(), false);
+    }
+
+    /**
+     * Load(STORE) 스텝만 종료하고 배치는 열어둔다 - 적재 실패 행의 재시도가 끝날 때까지 배치를
+     * 닫지 않기 위해 쓴다. 같은 execId로 다시 {@link #continueBatchWithLoadStep}을 부르면 서버가
+     * 기존 STORE 행을 돌려주고, 이 메서드로 다시 마감하면 건수가 합산되고 상태가 병합된다
+     * (로그 컬렉터 서버의 재진입 단계 규칙).
+     */
+    public void finishLoadStepKeepBatchOpen(BatchHandle handle, LoadResult result) {
+        if (!handle.active()) {
+            return;
+        }
+        finish(handle, result.totalProcessed(), result.successCount(), result.failCount(), false);
+    }
+
+    /**
+     * 열어둔 배치를 최종 상태로 닫는다 - 단계별 결과를 합친 상태를 호출부가 정해서 넘긴다
+     * ({@code PublicDataPipelineRunner}가 수집·정제·적재 중 가장 나쁜 결과로 계산). 소요 시간은
+     * 수집 시작부터 잰다.
+     */
+    public void closeBatch(String execId, LocalDateTime batchStartedAt, LogCollectorStatus status,
+            int targetCnt, int successCnt, int failCnt) {
+        if (!client.isEnabled() || execId == null) {
+            return;
+        }
+        JSONObject body = new JSONObject()
+            .put("execStsCd", status.name())
+            .put("endDtm", DTM.format(LocalDateTime.now()))
+            .put("elapsedSec", elapsedSeconds(batchStartedAt))
+            .put("targetCnt", targetCnt)
+            .put("successCnt", successCnt)
+            .put("failCnt", failCnt);
+        client.finishBatch(execId, body);
+    }
+
+    /**
+     * 우리(EXTERNAL_API)가 연 배치 중 {@code threshold}보다 오래 RUNNING인 것을 FAIL로 닫는다 -
+     * 파드 재시작(배포 포함) 등으로 이어받을 주체가 사라진 배치를 정리하는 안전망.
+     *
+     * @return 닫은 배치 수
+     */
+    public int closeStaleBatches(Duration threshold) {
+        if (!client.isEnabled()) {
+            return 0;
+        }
+        LocalDateTime cutoff = LocalDateTime.now().minus(threshold);
+        String fromDate = cutoff.minusDays(STALE_LOOKBACK_DAYS).format(DateTimeFormatter.BASIC_ISO_DATE);
+
+        List<JSONObject> stale = new ArrayList<>();
+        for (int page = 0; page < STALE_MAX_PAGES; page++) {
+            String query = "stsCd=RUNNING&dataTypeCd=" + DataTypeClassifier.EXTERNAL_PUBLIC
+                + "&dataTypeCd=" + DataTypeClassifier.EXTERNAL_LAW
+                + "&fromDate=" + fromDate + "&size=" + STALE_PAGE_SIZE + "&page=" + page;
+            Optional<JSONObject> result = client.listBatches(query);
+            JSONArray content = result.map(r -> r.optJSONArray("content")).orElse(null);
+            if (content == null || content.isEmpty()) {
+                break;
+            }
+            for (int i = 0; i < content.length(); i++) {
+                JSONObject row = content.getJSONObject(i);
+                if (JOB_ID.equals(row.optString("jobId")) && startedBefore(row, cutoff)) {
+                    stale.add(row);
+                }
+            }
+            if (page + 1 >= result.get().optInt("totalPages", 0)) {
+                break;
+            }
+        }
+
+        for (JSONObject row : stale) {
+            String execId = row.getString("execId");
+            LocalDateTime startDtm = LocalDateTime.parse(row.getString("startDtm"));
+            JSONObject body = new JSONObject()
+                .put("execStsCd", LogCollectorStatus.FAIL.name())
+                .put("endDtm", DTM.format(LocalDateTime.now()))
+                .put("elapsedSec", elapsedSeconds(startDtm))
+                .put("errTypeCd", "SYSTEM")
+                .put("errMsg", "외부연계 배치가 " + threshold.toHours() + "시간 넘게 종료되지 않아 자동 종료"
+                    + " - 파드 재시작 등으로 이어받을 처리가 사라진 것으로 추정");
+            client.finishBatch(execId, body);
+            logger.warn("[LOG-COLLECTOR] 오래 열린 배치 자동 종료 execId={} startDtm={}", execId, startDtm);
+        }
+        return stale.size();
+    }
+
+    private static boolean startedBefore(JSONObject row, LocalDateTime cutoff) {
+        try {
+            return LocalDateTime.parse(row.getString("startDtm")).isBefore(cutoff);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private BatchHandle start(String jobNm, String dataTypeCd, ExecutionType executionType, String triggerBy, String stepTypeCd) {
         if (!client.isEnabled()) {
             return BatchHandle.inactive();
@@ -180,6 +346,15 @@ public class LogCollectorBatchService {
     }
 
     private void finish(BatchHandle handle, int targetCnt, int successCnt, int failCnt) {
+        finish(handle, targetCnt, successCnt, failCnt, true);
+    }
+
+    /**
+     * @param closeBatch false면 step만 종료하고 배치(execId)는 RUNNING 상태로 남겨둔다 - LAW의
+     *                    collect→cleanse 배치 연결({@link #finishCollectStepKeepBatchOpen})에서만
+     *                    쓴다. 기존 3개 finishXxxBatch는 전부 true로 호출되어 동작이 그대로다.
+     */
+    private void finish(BatchHandle handle, int targetCnt, int successCnt, int failCnt, boolean closeBatch) {
         String status = LogCollectorStatus.aggregate(successCnt, failCnt).name();
         String endDtm = DTM.format(LocalDateTime.now());
         long elapsedSec = elapsedSeconds(handle.startedAt());
@@ -192,6 +367,10 @@ public class LogCollectorBatchService {
             .put("outCnt", successCnt)
             .put("errCnt", failCnt);
         client.finishStep(handle.stepLogId(), stepFinish);
+
+        if (!closeBatch) {
+            return;
+        }
 
         JSONObject batchFinish = new JSONObject()
             .put("execStsCd", status)

@@ -18,4 +18,19 @@ public enum LogCollectorStatus {
         }
         return PARTIAL;
     }
+
+    /**
+     * 단계별 결과를 배치 최종 상태로 합칠 때 더 나쁜 쪽(SUCCESS &lt; PARTIAL &lt; FAIL). 한 단계가
+     * FAIL이면 다음 단계로 넘어간 행이 없어 그 단계에서 배치가 닫히므로, 앞 단계의 FAIL 뒤에
+     * 성공 단계가 이어지는 조합은 생기지 않는다.
+     */
+    public static LogCollectorStatus worst(LogCollectorStatus a, LogCollectorStatus b) {
+        if (a == null) {
+            return b;
+        }
+        if (b == null) {
+            return a;
+        }
+        return a.ordinal() >= b.ordinal() ? a : b;
+    }
 }

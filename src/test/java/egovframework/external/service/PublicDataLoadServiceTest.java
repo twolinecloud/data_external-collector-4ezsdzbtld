@@ -14,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,6 +34,7 @@ import static org.mockito.Mockito.when;
 class PublicDataLoadServiceTest {
 
     private static final String OPERATION_KEY = "kma-village-forecast-vilage-fcst";
+    private static final String RUN_ID = "01RUN0000000000000000000B";
 
     @Mock
     private RawStagingStore rawStagingStore;
@@ -49,37 +49,32 @@ class PublicDataLoadServiceTest {
 
     private static final int MAX_ATTEMPTS = 3;
 
-    /**
-     * 재시도 대상이 없는 상태를 명시. 서비스가 CLEANSED보다 LOAD_FAILED를 먼저 조회하므로,
-     * 이 스텁이 없으면 Mockito strict stub이 "CLEANSED 스텁을 두고 다른 인자로 호출했다"며
-     * PotentialStubbingProblem을 던진다.
-     */
-    private void noRetryBacklog() {
-        when(rawStagingStore.findByStatus("LOAD_FAILED", 100, Set.of(), false)).thenReturn(List.of());
-    }
-
     private PublicDataLoadService service(boolean enabled) {
         return new PublicDataLoadService(rawStagingStore, loaderRegistry, meterRegistry, enabled, MAX_ATTEMPTS);
     }
 
     @Test
     void enabled가_false면_raw_staging을_전혀_건드리지_않고_빈_결과를_반환한다() {
-        LoadResult result = service(false).loadAllPending();
+        PublicDataLoadService disabled = service(false);
 
-        assertThat(result).isEqualTo(new LoadResult(0, 0, 0));
+        assertThat(disabled.loadRun(RUN_ID)).isEqualTo(new LoadResult(0, 0, 0));
+        assertThat(disabled.retryRun(RUN_ID)).isEqualTo(new LoadResult(0, 0, 0));
+        assertThat(disabled.pendingRunIds()).isEmpty();
+        assertThat(disabled.pendingRetryRunIds()).isEmpty();
+        verify(rawStagingStore, never()).findByStatusAndRunId(any(), anyInt(), any());
         verify(rawStagingStore, never()).findByStatus(any(), anyInt(), any(), anyBoolean());
+        verify(rawStagingStore, never()).pendingRunIds(any());
     }
 
     @Test
     void CLEANSED_행을_적재기로_적재해서_LOADED로_전이시키고_메트릭을_남긴다() throws LoadException {
-        noRetryBacklog();
         RawStagingDto dto = cleansedRow(1L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("CLEANSED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).loadRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(1);
         assertThat(result.successCount()).isEqualTo(1);
@@ -96,14 +91,13 @@ class PublicDataLoadServiceTest {
 
     @Test
     void 적재기를_못_찾으면_실패가_아니라_LOAD_SKIPPED로_종결한다() {
-        noRetryBacklog();
         RawStagingDto dto = cleansedRow(2L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("CLEANSED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.empty());
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).loadRun(RUN_ID);
 
         // 적재 대상이 아닌 행은 이 단계가 한 일이 없으므로 배치 집계에 잡히지 않는다 -
         // 실패로 세면 법제처 배치가 매일 수백 건 실패로 보고된다.
@@ -122,45 +116,43 @@ class PublicDataLoadServiceTest {
 
     @Test
     void 적재기가_LoadException을_던지면_LOAD_FAILED로_남기고_배치는_계속된다() throws LoadException {
-        noRetryBacklog();
         RawStagingDto dto = cleansedRow(3L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("CLEANSED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
         org.mockito.Mockito.doThrow(new LoadException("소스", "API", "FK 위반")).when(loader).load(dto);
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).loadRun(RUN_ID);
 
         assertThat(result.failCount()).isEqualTo(1);
         verify(rawStagingStore).markLoadFailed(eq(3L), eq("FK 위반"));
     }
 
     @Test
-    void findByStatus가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws LoadException {
-        noRetryBacklog();
+    void findByStatusAndRunId가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws LoadException {
         RawStagingDto first = cleansedRow(4L);
         RawStagingDto second = cleansedRow(5L);
-        when(rawStagingStore.findByStatus("CLEANSED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("CLEANSED", 100, RUN_ID))
             .thenReturn(List.of(first))
             .thenReturn(List.of(second))
             .thenReturn(List.of());
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).loadRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(2);
-        verify(rawStagingStore, times(3)).findByStatus("CLEANSED", 100, Set.of(), false);
+        verify(rawStagingStore, times(3)).findByStatusAndRunId("CLEANSED", 100, RUN_ID);
     }
 
     @Test
-    void 지난_주기에_실패한_LOAD_FAILED_행을_먼저_재시도한다() throws LoadException {
+    void 지난_주기에_실패한_LOAD_FAILED_행을_재시도한다() throws LoadException {
         RawStagingDto retried = failedRow(6L, 1);
-        when(rawStagingStore.findByStatus("LOAD_FAILED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 100, RUN_ID))
             .thenReturn(List.of(retried));
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).retryRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(1);
         assertThat(result.successCount()).isEqualTo(1);
@@ -174,15 +166,15 @@ class PublicDataLoadServiceTest {
         // 처럼 "빈 배치가 나올 때까지" 반복하면 같은 행을 영원히 붙들게 되므로, 재시도 조회는
         // 주기당 정확히 1회여야 한다.
         RawStagingDto stuck = failedRow(7L, 1);
-        when(rawStagingStore.findByStatus("LOAD_FAILED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 100, RUN_ID))
             .thenReturn(List.of(stuck));
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
         org.mockito.Mockito.doThrow(new LoadException("소스", "API", "또 실패")).when(loader).load(stuck);
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).retryRun(RUN_ID);
 
         assertThat(result.failCount()).isEqualTo(1);
-        verify(rawStagingStore, times(1)).findByStatus("LOAD_FAILED", 100, Set.of(), false);
+        verify(rawStagingStore, times(1)).findByStatusAndRunId("LOAD_FAILED", 100, RUN_ID);
         verify(rawStagingStore).markLoadFailed(eq(7L), eq("또 실패"));
     }
 
@@ -190,12 +182,12 @@ class PublicDataLoadServiceTest {
     void 재시도_한도를_소진하면_LOAD_ABANDONED로_종결하고_포기_메트릭을_남긴다() throws LoadException {
         // 이미 2회 실패한 행 - 이번이 3회째라 한도(MAX_ATTEMPTS=3) 도달
         RawStagingDto lastChance = failedRow(8L, MAX_ATTEMPTS - 1);
-        when(rawStagingStore.findByStatus("LOAD_FAILED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 100, RUN_ID))
             .thenReturn(List.of(lastChance));
         when(loaderRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(loader));
         org.mockito.Mockito.doThrow(new LoadException("소스", "API", "여전히 실패")).when(loader).load(lastChance);
 
-        LoadResult result = service(true).loadAllPending();
+        LoadResult result = service(true).retryRun(RUN_ID);
 
         assertThat(result.failCount()).isEqualTo(1);
         verify(rawStagingStore).markLoadAbandoned(eq(8L), eq("여전히 실패"));
@@ -204,6 +196,15 @@ class PublicDataLoadServiceTest {
         assertThat(meterRegistry.get("public_data_load_abandoned_total")
             .tag("operationKey", OPERATION_KEY)
             .counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void hasPendingRetry는_그_run에_LOAD_FAILED_행이_남았는지_본다() {
+        when(rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 1, RUN_ID)).thenReturn(List.of(failedRow(9L, 1)));
+        when(rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 1, "other-run")).thenReturn(List.of());
+
+        assertThat(service(true).hasPendingRetry(RUN_ID)).isTrue();
+        assertThat(service(true).hasPendingRetry("other-run")).isFalse();
     }
 
     private RawStagingDto failedRow(Long id, int attemptCount) {
@@ -223,6 +224,7 @@ class PublicDataLoadServiceTest {
             .collectorKey("kma-village-forecast-vilage-fcst--1270280")
             .cleansedPayload("[{\"nx\":67,\"ny\":100}]")
             .status("CLEANSED")
+            .collectRunId(RUN_ID)
             .build();
     }
 

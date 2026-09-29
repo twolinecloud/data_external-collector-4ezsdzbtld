@@ -120,6 +120,17 @@ public class LogCollectorClient {
         return patch(baseUrl + "/api/v1/logs/batches/" + execId, body).isPresent();
     }
 
+    /**
+     * 배치 목록 조회({@code GET /batches}) - 응답의 {@code result}(페이지 객체: content/page/size/
+     * totalCount/totalPages)를 그대로 돌려준다. 오래 열린 배치 정리에 쓴다.
+     *
+     * @param query 인코딩된 쿼리스트링(예: {@code stsCd=RUNNING&dataTypeCd=EXTERNAL_PUBLIC&size=200})
+     */
+    public Optional<JSONObject> listBatches(String query) {
+        return call(baseUrl + "/api/v1/logs/batches?" + query, HttpMethod.GET, null)
+            .map(r -> r.optJSONObject("result"));
+    }
+
     private String field(JSONObject response, String name) {
         JSONObject result = response.optJSONObject("result");
         return result == null ? null : result.optString(name, null);
@@ -140,7 +151,8 @@ public class LogCollectorClient {
         Callable<Optional<JSONObject>> task = () -> {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<String> entity = new HttpEntity<>(body.toString(), headers);
+            // GET에 본문을 실으면 HttpURLConnection이 POST로 바꿔 보내므로 본문 없이 보낸다.
+            HttpEntity<String> entity = body == null ? new HttpEntity<>(headers) : new HttpEntity<>(body.toString(), headers);
             ResponseEntity<String> response = restTemplate.exchange(URI.create(url), method, entity, String.class);
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {

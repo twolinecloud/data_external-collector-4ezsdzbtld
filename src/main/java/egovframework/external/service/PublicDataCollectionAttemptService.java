@@ -10,6 +10,7 @@ import egovframework.external.model.ExecutionType;
 import egovframework.external.staging.CollectionAttemptLogStore;
 import egovframework.external.staging.RawStagingStore;
 import egovframework.external.utility.PipelineLogUtils;
+import egovframework.external.utility.Ulid;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -96,6 +97,17 @@ public class PublicDataCollectionAttemptService {
      *         무시해도 그대로 동작한다(부수효과는 이전과 동일).
      */
     public CollectResult run(PublicDataCollector collector, ExecutionType executionType) {
+        return run(collector, executionType, Ulid.generate(), null);
+    }
+
+    /**
+     * @param collectRunId 이 수집이 속한 수집 실행 1회의 로컬 ID - 정제·적재가 이 값으로 행을
+     *                     묶어 처리한다({@link RawStagingDto#getCollectRunId()})
+     * @param execId       이 수집을 감싸는 로그 컬렉터 배치의 execId(로그 컬렉터가 꺼져있거나 배치
+     *                     생성에 실패했으면 null) - 정제·적재가 같은 배치에 단계를 이어붙이는 데 쓴다
+     */
+    public CollectResult run(PublicDataCollector collector, ExecutionType executionType,
+            String collectRunId, String execId) {
         String sourceName = collector.sourceName();
         String apiName = collector.apiName();
         String collectorKey = collector.key();
@@ -138,6 +150,7 @@ public class PublicDataCollectionAttemptService {
         // 항목(카테고리x시간) 하나마다 행을 만들지 않고, 이번 수집 1회 전체를 JSON 배열 하나로
         // 묶어서 행 1개로 저장한다 - 단기예보 한 번에 900건 가까이 나오는데 그걸 낱개로 쌓으면
         // 인메모리 스토어가 스케줄 몇 바퀴만 돌아도 무한정 불어남.
+        Long rawStagingId = null;
         if (!rawPayloads.isEmpty()) {
             String combinedPayload = "[" + String.join(",", rawPayloads) + "]";
             RawStagingDto dto = RawStagingDto.builder()
@@ -148,13 +161,19 @@ public class PublicDataCollectionAttemptService {
                 .collectorKey(collectorKey)
                 .rawPayload(combinedPayload)
                 .expiresAt(expiresAt(collector))
+                .originExecId(execId)
+                .collectRunId(collectRunId)
                 .build();
             rawStagingStore.insert(dto);
+            rawStagingId = dto.getId();
         }
 
         long tookMs = stopTimer(sample, collectorKey);
         PipelineLogUtils.info(logger, STAGE, sourceName, apiName,
-            "collected " + rawPayloads.size() + " record(s) in " + tookMs + "ms");
+            "collected " + rawPayloads.size() + " record(s) in " + tookMs + "ms"
+                + (rawStagingId != null
+                    ? " (raw_staging id=" + rawStagingId + ", runId=" + collectRunId + ", execId=" + execId + ")"
+                    : ""));
         logAttempt(sourceName, apiName, executionType, AttemptStatus.SUCCESS, rawPayloads.size(), null, collectorKey);
         return new CollectResult(collectorKey, sourceName, apiName, AttemptStatus.SUCCESS, rawPayloads.size(), null);
     }
