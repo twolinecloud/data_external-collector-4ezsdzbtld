@@ -53,6 +53,18 @@ public class RawStagingDto {
     int loadAttemptCount;
     String processedBatchId;
     /**
+     * 이 행을 만든 collect 시도의 로그 컬렉터 execId (로그 컬렉터가 꺼져있거나 배치 생성에
+     * 실패했으면 null). collect/cleanse/load 전 단계 로그에 그대로 실어 남겨서, 이 행이
+     * 종결 상태에 이르거나 자연 evict될 때까지 origin을 그레핑으로 추적할 수 있게 한다.
+     */
+    String originExecId;
+    /**
+     * 이 행을 만든 수집 실행 1회(스케줄 1틱 또는 수동 1회)의 로컬 ID(ULID). 로그 컬렉터가 꺼져
+     * 있어도 항상 채워진다 - 정제·적재가 행을 이 값으로 묶어 "수집 실행 단위"로 처리하므로,
+     * 같은 API의 서로 다른 수집분이 한 배치에 섞이지 않는다({@code PublicDataPipelineRunner}).
+     */
+    String collectRunId;
+    /**
      * 이 행을 더 붙들고 있을 이유가 없어지는 시각 ({@code PublicDataCollector.stagingExpiresAt}).
      * {@code null}이면 기한 없음 - 법령/재난문자처럼 기한을 두지 않는 소스가 그렇다.
      * 기한이 지난 행은 상태와 무관하게 {@code RawStagingStore#insert} 시점에 폐기된다.

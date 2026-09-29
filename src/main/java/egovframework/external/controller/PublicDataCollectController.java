@@ -1,14 +1,12 @@
 package egovframework.external.controller;
 
 import egovframework.external.annotation.AdminCallable;
-import egovframework.external.logcollector.BatchHandle;
-import egovframework.external.logcollector.LogCollectorBatchService;
-import egovframework.external.model.CollectResult;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.publicdata.collector.PublicDataCollectorRegistry;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.response.Response;
 import egovframework.external.service.PublicDataCollectionAttemptService;
+import egovframework.external.service.PublicDataPipelineRunner;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -36,8 +34,7 @@ import java.util.concurrent.Callable;
 public class PublicDataCollectController {
 
     private final PublicDataCollectorRegistry collectorRegistry;
-    private final PublicDataCollectionAttemptService collectionAttemptService;
-    private final LogCollectorBatchService logCollectorBatchService;
+    private final PublicDataPipelineRunner pipelineRunner;
 
     /**
      * {@code GET /public-data/collect} - 등록된 전체 컬렉터 목록 조회.
@@ -88,10 +85,9 @@ public class PublicDataCollectController {
         return () -> {
             PublicDataCollector collector = collectorRegistry.get(key);
 
-            BatchHandle handle = logCollectorBatchService.startCollectBatch(
-                collector.operationKey(), ExecutionType.MANUAL, "manual-api:" + collector.key());
-            CollectResult result = collectionAttemptService.run(collector, ExecutionType.MANUAL);
-            logCollectorBatchService.finishCollectBatch(handle, List.of(result));
+            // 스케줄과 같은 경로 - 수동 수집도 수집 실행 1회로 정제·적재까지 같은 execId로 이어진다.
+            pipelineRunner.collect(collector.operationKey(), List.of(collector),
+                ExecutionType.MANUAL, "manual-api:" + collector.key());
 
             return Response.of(Map.of(
                 "key", collector.key(),

@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -63,40 +62,39 @@ public class PublicDataLoadService {
         this.maxAttempts = maxAttempts;
     }
 
-    /**
-     * CLEANSED 상태 전체를 다 뺄 때까지 반복 처리.
-     *
-     * @return 총/성공/실패 건수 (enabled=false면 전부 0)
-     */
-    public LoadResult loadAllPending() {
-        return loadPending(Set.of(), false);
+    public boolean isEnabled() {
+        return enabled;
     }
 
     /**
-     * operationKey로 걸러서 CLEANSED 상태를 처리 - 로그 컬렉터 배치를 EXTERNAL_PUBLIC/
-     * EXTERNAL_LAW로 나눠 보고하기 위해 도입(2026-08-27, {@code PublicDataLoadScheduler}
-     * 참고). {@code operationKeys}가 비어있으면 {@link #loadAllPending()}과 동일.
+     * 적재 대기(CLEANSED) 행이 있는 수집 실행(collectRunId) 목록, 오래된 순 - 적재는 수집 실행
+     * 1회 단위로 처리한다(2026-09-29, {@code PublicDataPipelineRunner} 참고). 적재가 꺼져 있으면
+     * 빈 목록(raw_staging을 건드리지 않는다는 원칙 유지).
      */
-    public LoadResult loadPending(Set<String> operationKeys, boolean exclude) {
+    public List<String> pendingRunIds() {
+        return enabled ? rawStagingStore.pendingRunIds("CLEANSED") : List.of();
+    }
+
+    /** 그 수집 실행의 적재 대기 행 하나를 소모하지 않고 들여다본다(카테고리·origin execId 확인용). */
+    public Optional<RawStagingDto> peekRun(String collectRunId) {
+        List<RawStagingDto> peek = rawStagingStore.findByStatusAndRunId("CLEANSED", 1, collectRunId);
+        return peek.isEmpty() ? Optional.empty() : Optional.of(peek.get(0));
+    }
+
+    /**
+     * 그 수집 실행의 CLEANSED 행을 다 뺄 때까지 적재. 실패하면 LOAD_FAILED로 빠져나가 이 조회에
+     * 다시 안 걸리므로 소진될 때까지 반복해도 안전하다. 실패 행은 다음 주기 {@link #retryFailed}가
+     * 재시도한다 - 일시적 장애에 시간 여유를 주는 효과.
+     *
+     * @return 총/성공/실패 건수 (enabled=false면 전부 0)
+     */
+    public LoadResult loadRun(String collectRunId) {
         if (!enabled) {
             return new LoadResult(0, 0, 0);
         }
-
         Tally tally = new Tally();
-
-        // 1) 지난 주기에 실패한 행 재시도. 여기서는 소진될 때까지 반복하지 않는다 - 재시도가
-        //    또 실패하면 그 행이 다시 LOAD_FAILED가 되어 같은 조회에 즉시 다시 잡히므로
-        //    호출 하나가 무한루프에 빠진다(RawStagingStore#findByStatus 주석의 경고와 같은
-        //    상황). 한 주기에 최대 BATCH_SIZE건만 재시도하고 나머지는 다음 주기로 넘긴다.
-        for (RawStagingDto dto : rawStagingStore.findByStatus("LOAD_FAILED", BATCH_SIZE, operationKeys, exclude)) {
-            tally.add(loadOne(dto));
-        }
-
-        // 2) 신규 CLEANSED 행. 실패하면 LOAD_FAILED로 빠져나가 이 조회에 다시 안 걸리므로
-        //    (1)과 달리 소진될 때까지 반복해도 안전하다. 이번 주기에 실패한 행은 (1)이 이미
-        //    지나갔으니 다음 주기부터 재시도된다 - 일시적 장애에 시간 여유를 주는 효과.
         List<RawStagingDto> batch;
-        while (!(batch = rawStagingStore.findByStatus("CLEANSED", BATCH_SIZE, operationKeys, exclude)).isEmpty()) {
+        while (!(batch = rawStagingStore.findByStatusAndRunId("CLEANSED", BATCH_SIZE, collectRunId)).isEmpty()) {
             for (RawStagingDto dto : batch) {
                 tally.add(loadOne(dto));
             }
@@ -104,7 +102,41 @@ public class PublicDataLoadService {
         return new LoadResult(tally.total, tally.success, tally.fail);
     }
 
-    /** loadPending의 두 단계가 같은 집계를 공유하기 위한 카운터. */
+    /** 재시도 대기(LOAD_FAILED) 행이 있는 수집 실행 목록, 오래된 순. 적재가 꺼져 있으면 빈 목록. */
+    public List<String> pendingRetryRunIds() {
+        return enabled ? rawStagingStore.pendingRunIds("LOAD_FAILED") : List.of();
+    }
+
+    /** 그 수집 실행의 재시도 대기 행 하나를 소모하지 않고 들여다본다. */
+    public Optional<RawStagingDto> peekRetry(String collectRunId) {
+        List<RawStagingDto> peek = rawStagingStore.findByStatusAndRunId("LOAD_FAILED", 1, collectRunId);
+        return peek.isEmpty() ? Optional.empty() : Optional.of(peek.get(0));
+    }
+
+    /** 그 수집 실행에 아직 재시도할 행(LOAD_FAILED)이 남아 있나 - 배치를 닫아도 되는지 판단용. */
+    public boolean hasPendingRetry(String collectRunId) {
+        return peekRetry(collectRunId).isPresent();
+    }
+
+    /**
+     * 그 수집 실행의 실패 행 재시도. 소진될 때까지 반복하지 않는다 - 재시도가 또 실패하면 그 행이
+     * 다시 LOAD_FAILED가 되어 같은 조회에 즉시 다시 잡히므로 호출 하나가 무한루프에 빠진다
+     * (RawStagingStore#findByStatus 주석의 경고와 같은 상황). 한 주기에 최대 BATCH_SIZE건만
+     * 재시도하고 나머지는 다음 주기로 넘긴다. {@code max-attempts}를 넘기면 LOAD_ABANDONED로
+     * 종결된다({@link #loadOne}).
+     */
+    public LoadResult retryRun(String collectRunId) {
+        if (!enabled) {
+            return new LoadResult(0, 0, 0);
+        }
+        Tally tally = new Tally();
+        for (RawStagingDto dto : rawStagingStore.findByStatusAndRunId("LOAD_FAILED", BATCH_SIZE, collectRunId)) {
+            tally.add(loadOne(dto));
+        }
+        return new LoadResult(tally.total, tally.success, tally.fail);
+    }
+
+    /** 적재 결과를 배치 보고용으로 모으는 카운터. */
     private static final class Tally {
         private int total;
         private int success;
@@ -141,7 +173,9 @@ public class PublicDataLoadService {
             rawStagingStore.markLoaded(dto.getId());
             recordAttempt(operationKey, "SUCCESS");
             PipelineLogUtils.info(logger, STAGE, dto.getSourceName(), dto.getApiName(),
-                "raw_staging id=" + dto.getId() + " 적재 완료 (" + tookMs + "ms)");
+                "raw_staging id=" + dto.getId() + " 적재 완료 (" + tookMs + "ms, runId="
+                    + dto.getCollectRunId() + ", execId="
+                    + dto.getOriginExecId() + ")");
             return Outcome.SUCCESS;
         } catch (LoadException e) {
             fail(dto, sample, operationKey, e.getMessage(), e);

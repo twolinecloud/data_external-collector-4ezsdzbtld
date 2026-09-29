@@ -15,7 +15,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.Set;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +34,7 @@ import static org.mockito.Mockito.when;
 class PublicDataCleanseServiceTest {
 
     private static final String OPERATION_KEY = "kma-village-forecast-vilage-fcst";
+    private static final String RUN_ID = "01RUN0000000000000000000A";
 
     @Mock
     private RawStagingStore rawStagingStore;
@@ -60,13 +60,13 @@ class PublicDataCleanseServiceTest {
     @Test
     void COLLECTED_행을_정제기로_정제해서_CLEANSED로_전이시키고_메트릭을_남긴다() throws CleanseException {
         RawStagingDto dto = pendingRow(1L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(cleanser));
         when(cleanser.cleanse("[{\"t1h\":\"20\"}]")).thenReturn("[{\"t1h\":\"20\",\"reh\":null}]");
 
-        CleanseResult result = service().cleanseAllPending();
+        CleanseResult result = service().cleanseRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(1);
         assertThat(result.successCount()).isEqualTo(1);
@@ -85,12 +85,12 @@ class PublicDataCleanseServiceTest {
     @Test
     void 정제기를_못_찾으면_예외_없이_CLEANSE_FAILED로_남긴다() {
         RawStagingDto dto = pendingRow(2L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.empty());
 
-        CleanseResult result = service().cleanseAllPending();
+        CleanseResult result = service().cleanseRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(1);
         assertThat(result.successCount()).isZero();
@@ -107,14 +107,14 @@ class PublicDataCleanseServiceTest {
     @Test
     void 정제기가_CleanseException을_던지면_CLEANSE_FAILED로_남기고_배치는_계속된다() throws CleanseException {
         RawStagingDto dto = pendingRow(3L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 100, RUN_ID))
             .thenReturn(List.of(dto))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(cleanser));
         when(cleanser.cleanse(dto.getRawPayload()))
             .thenThrow(new CleanseException("소스", "API", "필드 없음"));
 
-        CleanseResult result = service().cleanseAllPending();
+        CleanseResult result = service().cleanseRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(1);
         assertThat(result.failCount()).isEqualTo(1);
@@ -129,21 +129,51 @@ class PublicDataCleanseServiceTest {
     }
 
     @Test
-    void findByStatus가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws CleanseException {
+    void findByStatusAndRunId가_빈_배치를_반환할때까지_반복해서_모두_처리한다() throws CleanseException {
         RawStagingDto first = pendingRow(4L);
         RawStagingDto second = pendingRow(5L);
-        when(rawStagingStore.findByStatus("COLLECTED", 100, Set.of(), false))
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 100, RUN_ID))
             .thenReturn(List.of(first))
             .thenReturn(List.of(second))
             .thenReturn(List.of());
         when(cleanserRegistry.find(OPERATION_KEY)).thenReturn(Optional.of(cleanser));
         when(cleanser.cleanse(any())).thenReturn("[]");
 
-        CleanseResult result = service().cleanseAllPending();
+        CleanseResult result = service().cleanseRun(RUN_ID);
 
         assertThat(result.totalProcessed()).isEqualTo(2);
         assertThat(result.successCount()).isEqualTo(2);
-        verify(rawStagingStore, times(3)).findByStatus("COLLECTED", 100, Set.of(), false);
+        verify(rawStagingStore, times(3)).findByStatusAndRunId("COLLECTED", 100, RUN_ID);
+    }
+
+    @Test
+    void peekRun은_대기행이_없으면_빈값을_반환하고_상태를_바꾸지_않는다() {
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 1, RUN_ID))
+            .thenReturn(List.of());
+
+        Optional<RawStagingDto> result = service().peekRun(RUN_ID);
+
+        assertThat(result).isEmpty();
+        verify(rawStagingStore, never()).markCleansed(any(), any(), any());
+    }
+
+    @Test
+    void peekRun은_대기행이_있으면_소모하지_않고_그대로_반환한다() {
+        RawStagingDto row = RawStagingDto.builder()
+            .id(9L)
+            .operationKey("moleg-criminal-law")
+            .status("COLLECTED")
+            .originExecId("20260928EXT001")
+            .build();
+        when(rawStagingStore.findByStatusAndRunId("COLLECTED", 1, RUN_ID))
+            .thenReturn(List.of(row));
+
+        Optional<RawStagingDto> result = service().peekRun(RUN_ID);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getOriginExecId()).isEqualTo("20260928EXT001");
+        verify(rawStagingStore, never()).markCleansed(any(), any(), any());
+        verify(rawStagingStore, never()).markCleanseFailed(any(), any(), any());
     }
 
     private RawStagingDto pendingRow(Long id) {
@@ -156,6 +186,7 @@ class PublicDataCleanseServiceTest {
             .collectorKey("kma-village-forecast-vilage-fcst--f101")
             .rawPayload("[{\"t1h\":\"20\"}]")
             .status("COLLECTED")
+            .collectRunId(RUN_ID)
             .build();
     }
 }

@@ -142,6 +142,29 @@ public class InMemoryRawStagingStore implements RawStagingStore {
     }
 
     @Override
+    public List<String> pendingRunIds(String status) {
+        return records.values().stream()
+            .filter(r -> status.equals(r.getStatus()) && r.getCollectRunId() != null)
+            .sorted(OLDEST_FIRST)
+            .map(RawStagingDto::getCollectRunId)
+            .distinct()
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<RawStagingDto> findByStatusAndRunId(String status, int limit, String collectRunId) {
+        return records.values().stream()
+            .filter(r -> status.equals(r.getStatus()) && collectRunId.equals(r.getCollectRunId()))
+            .sorted(OLDEST_FIRST)
+            .limit(limit)
+            .collect(Collectors.toList());
+    }
+
+    /** 같은 밀리초에 들어온 행끼리도 순서가 흔들리지 않게 id(삽입 순번)를 보조 키로 쓴다. */
+    private static final Comparator<RawStagingDto> OLDEST_FIRST =
+        Comparator.comparing(RawStagingDto::getCollectedAt).thenComparing(RawStagingDto::getId);
+
+    @Override
     public void markCleansed(Long id, String cleansedPayload, String processedBatchId) {
         update(id, dto -> {
             dto.setStatus("CLEANSED");
