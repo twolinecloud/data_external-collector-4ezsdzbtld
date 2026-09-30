@@ -76,7 +76,19 @@ public class KmaWeatherWarningListCollector implements PublicDataCollector {
         params.put("fromTmFc", today);
         params.put("toTmFc", today);
 
-        List<String> listItems = apiClient.call(sourceName(), apiName(), endpoint + "/getWthrWrnList", serviceKey, params);
+        List<String> listItems;
+        try {
+            listItems = apiClient.call(sourceName(), apiName(), endpoint + "/getWthrWrnList", serviceKey, params);
+        } catch (CollectException e) {
+            if (!isNoData(e)) {
+                throw e;
+            }
+            // 기상청은 "오늘 발표된 특보가 없음"을 빈 목록이 아니라 resultCode=03(NODATA)으로 돌려준다 -
+            // 실패가 아니라 정상적인 0건이다. 이걸 실패로 두면 특보가 없는 날엔 10분마다 FAIL 배치가 쌓인다
+            // (2026-09-28 67건 전부 FAIL). 다른 API의 03은 파라미터/시각 문제일 수 있어 여기서만 허용한다.
+            logger.info("[{}] {} - 오늘 발표된 특보 없음(NODATA), 0건으로 처리", sourceName(), apiName());
+            return List.of();
+        }
         if (listItems.isEmpty()) {
             return listItems;
         }
@@ -113,6 +125,10 @@ public class KmaWeatherWarningListCollector implements PublicDataCollector {
         }
 
         return enrichedList;
+    }
+
+    private static boolean isNoData(CollectException e) {
+        return e.getCause() instanceof KmaApiException api && "03".equals(api.getResultCode());
     }
 
     private Map<String, JSONObject> fetchWarningMessages(Set<String> stnIds, String today) {

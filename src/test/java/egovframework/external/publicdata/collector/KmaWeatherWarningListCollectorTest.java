@@ -11,8 +11,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,5 +97,41 @@ class KmaWeatherWarningListCollectorTest {
         assertThat(item.getInt("tmSeq")).isEqualTo(1);
         assertThat(item.getString("title")).isEqualTo("호우주의보");
         assertThat(item.has("t2")).isFalse();
+    }
+
+    @Test
+    void 목록조회가_NODATA면_실패가_아니라_빈_목록을_반환한다() throws CollectException {
+        KmaWeatherWarningListCollector collector =
+            new KmaWeatherWarningListCollector(apiClient, ENDPOINT, SERVICE_KEY);
+        when(apiClient.call(any(), any(), eq(ENDPOINT + "/getWthrWrnList"), eq(SERVICE_KEY), any()))
+            .thenThrow(new CollectException("s", "a", "KMA API 오류 - resultCode=03 (NODATA_ERROR-데이터없음) resultMsg=NO_DATA",
+                new KmaApiException("03", "NO_DATA")));
+
+        assertThat(collector.collect()).isEmpty();
+        verify(apiClient, never()).call(any(), any(), eq(ENDPOINT + "/getWthrWrnMsg"), any(), any());
+    }
+
+    @Test
+    void 목록조회가_NODATA가_아닌_API오류면_그대로_실패한다() throws CollectException {
+        KmaWeatherWarningListCollector collector =
+            new KmaWeatherWarningListCollector(apiClient, ENDPOINT, SERVICE_KEY);
+        CollectException quotaExceeded = new CollectException("s", "a", "KMA API 오류 - resultCode=22",
+            new KmaApiException("22", "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR"));
+        when(apiClient.call(any(), any(), eq(ENDPOINT + "/getWthrWrnList"), eq(SERVICE_KEY), any()))
+            .thenThrow(quotaExceeded);
+
+        assertThatThrownBy(collector::collect).isSameAs(quotaExceeded);
+    }
+
+    @Test
+    void 목록조회가_네트워크_오류로_실패하면_NODATA로_취급하지_않는다() throws CollectException {
+        KmaWeatherWarningListCollector collector =
+            new KmaWeatherWarningListCollector(apiClient, ENDPOINT, SERVICE_KEY);
+        CollectException network = new CollectException("s", "a", "API 호출 실패: Connect timed out",
+            new java.net.SocketTimeoutException("Connect timed out"));
+        when(apiClient.call(any(), any(), eq(ENDPOINT + "/getWthrWrnList"), eq(SERVICE_KEY), any()))
+            .thenThrow(network);
+
+        assertThatThrownBy(collector::collect).isSameAs(network);
     }
 }
