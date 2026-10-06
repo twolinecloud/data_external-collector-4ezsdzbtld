@@ -3,18 +3,14 @@ package egovframework.external.publicdata.scheduler;
 import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.model.ExecutionType;
-import egovframework.external.publicdata.collector.AirKoreaDustForecastCollector;
-import egovframework.external.publicdata.collector.AirKoreaRealtimeCollector;
-import egovframework.external.publicdata.collector.DisasterMsgCollector;
-import egovframework.external.publicdata.collector.KmaAsosHourlyCollector;
 import egovframework.external.publicdata.collector.KmaLocationCollectorFactory;
-import egovframework.external.publicdata.collector.KmaWeatherWarningListCollector;
-import egovframework.external.publicdata.collector.LivingWthrIdxCollectorFactory;
 import egovframework.external.publicdata.collector.MolegLawCollectorFactory;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.service.PublicDataCollectionAttemptService;
 import egovframework.external.service.PublicDataPipelineRunner;
 import lombok.RequiredArgsConstructor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -46,38 +42,34 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PublicDataCollectorScheduler {
 
+    private static final Logger logger = LogManager.getLogger(PublicDataCollectorScheduler.class);
+
     private final PublicDataPipelineRunner pipelineRunner;
-    private final KmaLocationCollectorFactory locationCollectorFactory;
-    private final KmaWeatherWarningListCollector kmaWeatherWarningListCollector;
-    private final KmaAsosHourlyCollector kmaAsosHourlyCollector;
-    private final AirKoreaRealtimeCollector airKoreaRealtimeCollector;
-    private final AirKoreaDustForecastCollector airKoreaDustForecastCollector;
-    private final MolegLawCollectorFactory lawCollectorFactory;
-    private final DisasterMsgCollector disasterMsgCollector;
-    private final LivingWthrIdxCollectorFactory livingWthrIdxCollectorFactory;
+    private final ScheduledOperations scheduledOperations;
+    private final ScheduleActivation scheduleActivation;
 
     /** 초단기실황: 매시 정각 발표, 10분 이후 제공 -> 매시 12분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-ncst.cron:0 12 * * * *}")
     public void collectKmaUltraSrtNcst() {
-        runAll("kma-village-forecast-ultra-srt-ncst", locationCollectorFactory.ultraSrtNcstCollectors());
+        runAll("kma-village-forecast-ultra-srt-ncst");
     }
 
     /** 초단기예보: 매시 30분 발표, 45분 이후 제공 -> 매시 47분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-ultra-srt-fcst.cron:0 47 * * * *}")
     public void collectKmaUltraSrtFcst() {
-        runAll("kma-village-forecast-ultra-srt-fcst", locationCollectorFactory.ultraSrtFcstCollectors());
+        runAll("kma-village-forecast-ultra-srt-fcst");
     }
 
     /** 단기예보: 1일 8회(02/05/08/11/14/17/20/23시) 발표, 10분 이후 제공 -> 15분에 전 지역(59개소) 순회 수집. */
     @Scheduled(cron = "${public-data.collector.kma-village-forecast-vilage-fcst.cron:0 15 2,5,8,11,14,17,20,23 * * *}")
     public void collectKmaVilageFcst() {
-        runAll("kma-village-forecast-vilage-fcst", locationCollectorFactory.vilageFcstCollectors());
+        runAll("kma-village-forecast-vilage-fcst");
     }
 
     /** 기상특보목록: 발표주기가 정해져있지 않아(이벤트성) 10분 간격 폴링. 전국 조회 1회라 지역 순회 불필요. */
     @Scheduled(cron = "${public-data.collector.kma-weather-warning-list.cron:0 */10 * * * *}")
     public void collectKmaWeatherWarningList() {
-        runAll("kma-weather-warning-list", List.of(kmaWeatherWarningListCollector));
+        runAll("kma-weather-warning-list");
     }
 
     /**
@@ -86,7 +78,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.kma-asos-hourly.cron:0 25 * * * *}")
     public void collectKmaAsosHourly() {
-        runAll("kma-asos-hourly", List.of(kmaAsosHourlyCollector));
+        runAll("kma-asos-hourly");
     }
 
     /**
@@ -96,7 +88,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.airkorea-realtime-measure.cron:0 20 * * * *}")
     public void collectAirKoreaRealtime() {
-        runAll("airkorea-realtime-measure", List.of(airKoreaRealtimeCollector));
+        runAll("airkorea-realtime-measure");
     }
 
     /**
@@ -106,7 +98,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.airkorea-dust-forecast.cron:0 15 5,11,17,23 * * *}")
     public void collectAirKoreaDustForecast() {
-        runAll("airkorea-dust-forecast", List.of(airKoreaDustForecastCollector));
+        runAll("airkorea-dust-forecast");
     }
 
     /**
@@ -123,7 +115,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.moleg-criminal-law.cron:0 0 5 * * *}")
     public void collectMolegCriminalLaws() {
-        runAll("moleg-criminal-law", lawCollectorFactory.allLawCollectors());
+        runAll("moleg-criminal-law");
     }
 
     /**
@@ -132,7 +124,7 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.safetydata-disaster-msg-list.cron:0 */10 * * * *}")
     public void collectDisasterMsgList() {
-        runAll("safetydata-disaster-msg-list", List.of(disasterMsgCollector));
+        runAll("safetydata-disaster-msg-list");
     }
 
     /**
@@ -141,21 +133,30 @@ public class PublicDataCollectorScheduler {
      */
     @Scheduled(cron = "${public-data.collector.kma-living-uv-idx.cron:0 10 0,3,6,9,12,15,18,21 * * *}")
     public void collectKmaLivingUvIdx() {
-        runAll("kma-living-uv-idx", livingWthrIdxCollectorFactory.uvIdxCollectors());
+        runAll("kma-living-uv-idx");
     }
 
     /** 대기정체지수: 자외선지수와 동일 발표주기 - {@link #collectKmaLivingUvIdx()} 참고. */
     @Scheduled(cron = "${public-data.collector.kma-living-air-diffusion-idx.cron:0 10 0,3,6,9,12,15,18,21 * * *}")
     public void collectKmaLivingAirDiffusionIdx() {
-        runAll("kma-living-air-diffusion-idx", livingWthrIdxCollectorFactory.airDiffusionIdxCollectors());
+        runAll("kma-living-air-diffusion-idx");
     }
 
     /**
      * operationKey 1틱 = 수집 실행(run) 1개 = 로그 컬렉터 배치 1개 (컬렉터가 몇 개든 - 59개소
      * 순회도 하나). 수집이 끝나면 곧바로 그 run을 정제·적재까지 진행하며 같은 execId에 단계를
      * 이어붙인다({@link PublicDataPipelineRunner#collectAndAdvance} 참고).
+     *
+     * <p>관리자 화면에서 스케줄을 사용 중지한 오퍼레이션은 이 틱을 건너뛴다({@link ScheduleActivation}).
+     * 관리자 설정이 없으면 사용으로 본다. 바로 실행 API는 사용 여부와 무관하게 실행한다.
      */
-    private void runAll(String operationKey, List<PublicDataCollector> collectors) {
+    private void runAll(String operationKey) {
+        if (!scheduleActivation.isActive(operationKey)) {
+            logger.info("[SCHEDULE] 사용 중지된 스케줄이라 이번 틱을 건너뜀 operationKey={}", operationKey);
+            return;
+        }
+        List<PublicDataCollector> collectors = scheduledOperations.collectors(operationKey)
+            .orElseThrow(() -> new IllegalStateException("등록되지 않은 스케줄 오퍼레이션: " + operationKey));
         pipelineRunner.collectAndAdvance(operationKey, collectors, ExecutionType.SCHEDULE, "scheduler:" + operationKey);
     }
 }

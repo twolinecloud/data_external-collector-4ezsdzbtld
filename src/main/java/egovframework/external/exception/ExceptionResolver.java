@@ -123,6 +123,24 @@ public class ExceptionResolver {
     }
 
     @ExceptionHandler({
+    ConflictException.class
+    })
+    @ResponseStatus(HttpStatus.CONFLICT)
+    @ResponseBody
+    public ErrorResponse conflictExceptionHandler(HttpServletRequest request, Exception exception) {
+        ErrorResponse response = null;
+        ExceptionBase e;
+        if (exception instanceof ExceptionBase) {
+            e = (ExceptionBase)exception;
+        } else {
+            e = new ConflictException(logger, exception.getClass().getSimpleName());
+        }
+        response = new ErrorResponse(e);
+        LogUtils.errorLog(e.logger, request, e);
+        return response;
+    }
+
+    @ExceptionHandler({
     ServiceUnavailableException.class
     })
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)

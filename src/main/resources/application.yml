@@ -86,6 +86,10 @@ management:
 # 소스(오퍼레이션)별 스케줄은 개별 cron으로 관리 (기본값은 PublicDataCollectorScheduler 코드에도 있음, 여기서 오버라이드 가능)
 # 엔드포인트는 weather-api.docx / data.go.kr 공개 스펙 기준 실제 값. serviceKey는 .env로 로컬 주입
 public-data:
+  # 관리자 서비스의 스케줄 사용 여부를 admin-db에서 다시 읽는 주기(ms). 관리자 서비스의 즉시 반영 호출을 놓쳤을 때
+  # 따라잡는 용도라 기본 5분. admin-db가 구성되지 않은 환경에서는 동작하지 않는다. README.md '관리자 서비스(admin-api) 연동' 참고.
+  schedule-sync:
+    interval-ms: ${PUBLIC_DATA_SCHEDULE_SYNC_INTERVAL_MS:300000}
   collector:
     kma-village-forecast-ultra-srt-ncst:
       cron: "0 12 * * * *"

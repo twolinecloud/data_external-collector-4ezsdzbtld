@@ -36,6 +36,10 @@ public enum ResponseCode {
     // HTTP_CODE 503
     SERVICE_UNAVAIABLE(6000),
 
+    // HTTP_CODE 409
+    // ConflictException
+    CONFLICT(7000),
+
     // HTTP_CODE 500
     UNKNOWN_ERROR(-1);
 
@@ -88,6 +92,9 @@ public enum ResponseCode {
             }
             case SERVICE_UNAVAIABLE: {
                 return "Temporary Service Unavailable";
+            }
+            case CONFLICT: {
+                return "Conflict";
             }
             case UNKNOWN_ERROR: {
                 return "Unknown Error";

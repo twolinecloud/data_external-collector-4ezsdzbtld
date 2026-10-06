@@ -133,6 +133,20 @@ class PublicDataPipelineRunnerTest {
         assertThat(r.openRunCount()).isZero();
     }
 
+    @Test
+    void 미리_열어_둔_배치가_있으면_새로_열지_않고_그_execId로_수집한다() {
+        PublicDataPipelineRunner r = runner();
+        BatchHandle pre = handle("exec-pre", "exec-pre01");
+        when(collectionAttemptService.run(any(), any(), anyString(), eq("exec-pre"))).thenReturn(ok());
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.empty());
+
+        r.collectAndAdvance(PUBLIC_OP, List.of(collectorA), ExecutionType.MANUAL, "admin01", pre);
+
+        verify(logCollectorBatchService, never()).startCollectBatch(any(), any(), any());
+        verify(collectionAttemptService).run(any(), eq(ExecutionType.MANUAL), anyString(), eq("exec-pre"));
+        verify(logCollectorBatchService).finishCollectBatch(pre, List.of(ok()));
+    }
+
     // ── 수집 직후 이어서 처리 ─────────────────────────────
 
     @Test

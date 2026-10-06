@@ -92,7 +92,7 @@ public class PublicDataPipelineRunner {
         String runId = Ulid.generate();
         runTracker.tryAcquire(runId);
         try {
-            return collectRun(runId, operationKey, collectors, executionType, triggerBy);
+            return collectRun(runId, operationKey, collectors, executionType, triggerBy, null);
         } finally {
             runTracker.release(runId);
         }
@@ -104,10 +104,21 @@ public class PublicDataPipelineRunner {
      */
     public List<CollectResult> collectAndAdvance(String operationKey, List<PublicDataCollector> collectors,
             ExecutionType executionType, String triggerBy) {
+        return collectAndAdvance(operationKey, collectors, executionType, triggerBy, null);
+    }
+
+    /**
+     * {@link #collectAndAdvance(String, List, ExecutionType, String)}와 같되, 호출자가 이미 열어 둔 배치로 이어서 실행한다.
+     * 바로 실행 API가 execId를 요청 응답에 먼저 돌려주고 수집은 백그라운드에서 진행할 때 쓴다.
+     *
+     * @param preStarted {@link LogCollectorBatchService#startCollectBatch}로 이미 연 수집 배치. null이면 여기서 연다
+     */
+    public List<CollectResult> collectAndAdvance(String operationKey, List<PublicDataCollector> collectors,
+            ExecutionType executionType, String triggerBy, BatchHandle preStarted) {
         String runId = Ulid.generate();
         runTracker.tryAcquire(runId);
         try {
-            List<CollectResult> results = collectRun(runId, operationKey, collectors, executionType, triggerBy);
+            List<CollectResult> results = collectRun(runId, operationKey, collectors, executionType, triggerBy, preStarted);
             advance(runId, operationKey, executionType, triggerBy);
             return results;
         } finally {
@@ -116,8 +127,10 @@ public class PublicDataPipelineRunner {
     }
 
     private List<CollectResult> collectRun(String runId, String operationKey, List<PublicDataCollector> collectors,
-            ExecutionType executionType, String triggerBy) {
-        BatchHandle handle = logCollectorBatchService.startCollectBatch(operationKey, executionType, triggerBy);
+            ExecutionType executionType, String triggerBy, BatchHandle preStarted) {
+        BatchHandle handle = preStarted != null
+            ? preStarted
+            : logCollectorBatchService.startCollectBatch(operationKey, executionType, triggerBy);
         String execId = handle.active() ? handle.execId() : null;
 
         List<CollectResult> results = new ArrayList<>(collectors.size());
