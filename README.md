@@ -48,8 +48,8 @@
   관리자 DB의 시각 값이 오퍼레이션별 실제 발표주기와 달라서 시각까지 따르면 수집 시각이 어긋난다.
 - 사용 중지한 오퍼레이션은 스케줄 틱을 건너뛴다(`[SCHEDULE] 사용 중지된 스케줄이라 이번 틱을 건너뜀`).
 - 사용 여부 판단 순서: ① 그 오퍼레이션의 `SCHD_CD` 행 → ② 데이터 구분 대표 행(`SCHD_CD` 없음) → ③ 둘 다 없으면 **사용**.
-- 호출을 놓쳐도 `ScheduleSettingSync`가 **기동 직후와 5분마다** admin-db에서 읽어 따라잡는다(`public-data.schedule-sync.interval-ms`). 조회 실패 시에는 기존 값을 유지한다.
-  admin-db가 구성되지 않은 환경(`public-data.load.enabled` 등이 모두 꺼진 경우)에서는 이 동기화가 동작하지 않고 즉시 반영 호출로만 갱신된다.
+- 호출을 놓쳐도 `ScheduleSettingSync`가 **기동 직후와 5분마다** admin-api의 `GET /api/batch-schedules`(토큰 불필요)로 전체 스케줄을 가져와 따라잡는다 - 정형·비정형 수집기와 같은 방식이다(`public-data.schedule-sync.interval-ms`). 조회에 실패하면 기존 값을 유지한다.
+  주소는 `admin-api.base-url`(환경변수 `ADMIN_API_URL`, 기본값은 dev 클러스터 내부 주소)이고, 비어 있으면 가져오지 않는다(로컬은 비어 있음). 관리자 DB를 직접 읽지 않는다.
 - 재시작하면 처음 동기화 전까지 모두 사용 상태다(메모리에만 보관).
 
 ### 긴급 재처리는 제공하지 않는다

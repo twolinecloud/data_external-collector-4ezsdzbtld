@@ -85,9 +85,16 @@ management:
 # 공공데이터 수집 파이프라인 (data-collector 저장소에서 이관됨, private-doc 19번 항목 참고)
 # 소스(오퍼레이션)별 스케줄은 개별 cron으로 관리 (기본값은 PublicDataCollectorScheduler 코드에도 있음, 여기서 오버라이드 가능)
 # 엔드포인트는 weather-api.docx / data.go.kr 공개 스펙 기준 실제 값. serviceKey는 .env로 로컬 주입
+# 관리자 서비스(admin-api). 스케줄 사용 여부를 기동 시와 주기적으로 GET /api/batch-schedules 로 가져온다
+# (정형·비정형 수집기와 같은 방식). 비우면 가져오지 않는다 - 로컬 개발은 application-local.yml 에서 비워 둔다.
+admin-api:
+  base-url: ${ADMIN_API_URL:http://admin-api-yo38xf9iff.service-core:8080}
+  connect-timeout-ms: 2000
+  read-timeout-ms: 3000
+
 public-data:
-  # 관리자 서비스의 스케줄 사용 여부를 admin-db에서 다시 읽는 주기(ms). 관리자 서비스의 즉시 반영 호출을 놓쳤을 때
-  # 따라잡는 용도라 기본 5분. admin-db가 구성되지 않은 환경에서는 동작하지 않는다. README.md '관리자 서비스(admin-api) 연동' 참고.
+  # 관리자 서비스의 스케줄 사용 여부를 다시 가져오는 주기(ms). 관리자 서비스의 즉시 반영 호출을 놓쳤을 때
+  # 따라잡는 용도라 기본 5분. README.md '관리자 서비스(admin-api) 연동' 참고.
   schedule-sync:
     interval-ms: ${PUBLIC_DATA_SCHEDULE_SYNC_INTERVAL_MS:300000}
   collector:

@@ -5,6 +5,11 @@ swagger-ui:
 logging:
   config: classpath:log4j2-spring.yml
 
+# 로컬에서는 클러스터 내부 주소로 나갈 수 없으므로 관리자 서비스 폴링을 끈다. 켜려면 ADMIN_API_URL 지정
+# (예: kubectl port-forward 한 주소).
+admin-api:
+  base-url: ${ADMIN_API_URL:}
+
 public-data:
   cleanse:
     json-drop:
