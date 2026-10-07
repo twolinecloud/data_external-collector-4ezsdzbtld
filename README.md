@@ -80,9 +80,9 @@
 
 ### 관리자 DB 설정 (배포 후)
 
-세부 스케줄 행의 `INSERT`는 **이 수집기가 배포된 뒤에** 한다. 행은 데이터 구분 대표 행(`SCHD_CD` NULL)을 그대로 두고 오퍼레이션별로 추가한다.
+세부 스케줄 행의 `INSERT`는 **이 수집기가 배포된 뒤에** 한다. 행은 오퍼레이션별로 추가한다. **공공 연계(`EXTERNAL_PUBLIC`)는 대표 행(`SCHD_CD` NULL)을 두지 않는다**(재처리를 제공하지 않고 오퍼레이션이 각자 행을 가져 필요 없다 - dev 는 삭제함). 법령(`EXTERNAL_LAW`)은 세부 행 없이 대표 행 하나가 실제 스케줄이다.
 
 - `REFRESH_URL` = `http://external-collector-4ezsdzbtld.data-pipeline:8080/internal/schedule/refresh` (모든 행 공통)
 - `RUN_URL` = `http://external-collector-4ezsdzbtld.data-pipeline:8080/internal/collect/external-incremental/{operationKey}`
-  (대표 행에는 넣지 않는다 - 대표 행의 바로 실행은 오퍼레이션을 정할 수 없다)
+  (법령은 대표 행에 `.../moleg-criminal-law`를 넣는다)
 - `REPROCESS_URL` = NULL
