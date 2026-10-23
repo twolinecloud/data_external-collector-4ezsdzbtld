@@ -9,8 +9,10 @@ import egovframework.external.model.AttemptStatus;
 import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
+import egovframework.external.model.SendResult;
 import egovframework.external.model.LoadResult;
 import egovframework.external.publicdata.collector.PublicDataCollector;
+import egovframework.external.publicdata.transfer.LawTransferService;
 import egovframework.external.staging.StagingRunTracker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,6 +56,8 @@ class PublicDataPipelineRunnerTest {
     @Mock
     private LogCollectorBatchService logCollectorBatchService;
     @Mock
+    private LawTransferService lawTransferService;
+    @Mock
     private PublicDataCollector collectorA;
     @Mock
     private PublicDataCollector collectorB;
@@ -62,7 +66,7 @@ class PublicDataPipelineRunnerTest {
 
     private PublicDataPipelineRunner runner() {
         return new PublicDataPipelineRunner(collectionAttemptService, cleanseService, loadService,
-            logCollectorBatchService, tracker);
+            logCollectorBatchService, tracker, lawTransferService);
     }
 
     private static BatchHandle handle(String execId, String stepLogId) {
@@ -310,6 +314,95 @@ class PublicDataPipelineRunnerTest {
 
         verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.SUCCESS), eq(491), eq(491), eq(0));
         verify(loadService, never()).peekRun(any());
+    }
+
+    @Test
+    void 법령_전송이_켜져_있으면_정제_뒤_같은_배치에_SEND_스텝을_붙이고_전송_건수로_닫는다() {
+        PublicDataPipelineRunner r = runner();
+        when(lawTransferService.isEnabled()).thenReturn(true);
+        String runId = openRun(r, LAW_OP, "exec-law", ok());
+        when(cleanseService.pendingRunIds()).thenReturn(List.of(runId));
+        when(cleanseService.peekRun(runId)).thenReturn(Optional.of(row(runId, LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        BatchHandle sendStep = handle("exec-law", "exec-law03");
+        when(logCollectorBatchService.continueBatchWithSendStep("exec-law")).thenReturn(Optional.of(sendStep));
+        when(cleanseService.cleanseRun(runId)).thenReturn(new CleanseResult(491, 491, 0));
+        when(lawTransferService.transfer(runId)).thenReturn(new SendResult(12, 12, 0));
+
+        r.cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        verify(logCollectorBatchService).finishSendStepKeepBatchOpen(sendStep, new SendResult(12, 12, 0));
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.SUCCESS), eq(12), eq(12), eq(0));
+        assertThat(r.openRunCount()).isZero();
+    }
+
+    @Test
+    void 법령_전송이_일부_실패하면_배치는_PARTIAL로_닫힌다() {
+        PublicDataPipelineRunner r = runner();
+        when(lawTransferService.isEnabled()).thenReturn(true);
+        String runId = openRun(r, LAW_OP, "exec-law", ok());
+        when(cleanseService.pendingRunIds()).thenReturn(List.of(runId));
+        when(cleanseService.peekRun(runId)).thenReturn(Optional.of(row(runId, LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        when(logCollectorBatchService.continueBatchWithSendStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law03")));
+        when(cleanseService.cleanseRun(runId)).thenReturn(new CleanseResult(491, 491, 0));
+        when(lawTransferService.transfer(runId)).thenReturn(new SendResult(10, 7, 3));
+
+        r.cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.PARTIAL), eq(10), eq(7), eq(3));
+    }
+
+    @Test
+    void 법령_전송_대상이_없으면_배치는_정제_건수로_닫는다() {
+        PublicDataPipelineRunner r = runner();
+        when(lawTransferService.isEnabled()).thenReturn(true);
+        String runId = openRun(r, LAW_OP, "exec-law", ok());
+        when(cleanseService.pendingRunIds()).thenReturn(List.of(runId));
+        when(cleanseService.peekRun(runId)).thenReturn(Optional.of(row(runId, LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        when(logCollectorBatchService.continueBatchWithSendStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law03")));
+        when(cleanseService.cleanseRun(runId)).thenReturn(new CleanseResult(491, 491, 0));
+        when(lawTransferService.transfer(runId)).thenReturn(new SendResult(0, 0, 0)); // 전부 변경 없음
+
+        r.cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.SUCCESS), eq(491), eq(491), eq(0));
+    }
+
+    @Test
+    void 법령_전송이_켜져_있어도_정제가_전부_실패했으면_전송하지_않고_정제에서_닫는다() {
+        PublicDataPipelineRunner r = runner();
+        when(lawTransferService.isEnabled()).thenReturn(true);
+        String runId = openRun(r, LAW_OP, "exec-law", ok());
+        when(cleanseService.pendingRunIds()).thenReturn(List.of(runId));
+        when(cleanseService.peekRun(runId)).thenReturn(Optional.of(row(runId, LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        when(cleanseService.cleanseRun(runId)).thenReturn(new CleanseResult(3, 0, 3));
+
+        r.cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        verify(lawTransferService, never()).transfer(any());
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.FAIL), eq(3), eq(0), eq(3));
+    }
+
+    @Test
+    void 법령_정제_이어받기에_실패해도_전송이_켜져_있으면_전송은_새_SEND_배치로_남긴다() {
+        when(lawTransferService.isEnabled()).thenReturn(true);
+        when(cleanseService.pendingRunIds()).thenReturn(List.of("run-law"));
+        when(cleanseService.peekRun("run-law")).thenReturn(Optional.of(row("run-law", LAW_OP, null)));
+        BatchHandle cleanseBatch = handle("exec-c", "exec-c01");
+        BatchHandle sendBatch = handle("exec-s", "exec-s01");
+        when(logCollectorBatchService.startCleanseBatch(
+            DataTypeClassifier.EXTERNAL_LAW, ExecutionType.SCHEDULE, "scheduler:cleanse")).thenReturn(cleanseBatch);
+        when(logCollectorBatchService.startSendBatch(
+            DataTypeClassifier.EXTERNAL_LAW, ExecutionType.SCHEDULE, "scheduler:cleanse")).thenReturn(sendBatch);
+        when(cleanseService.cleanseRun("run-law")).thenReturn(new CleanseResult(2, 2, 0));
+        when(lawTransferService.transfer("run-law")).thenReturn(new SendResult(2, 2, 0));
+
+        runner().cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        verify(logCollectorBatchService).finishSendBatch(sendBatch, new SendResult(2, 2, 0));
     }
 
     @Test

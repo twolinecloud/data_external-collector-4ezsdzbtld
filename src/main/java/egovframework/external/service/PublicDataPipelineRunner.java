@@ -10,7 +10,9 @@ import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.model.LoadResult;
+import egovframework.external.model.SendResult;
 import egovframework.external.publicdata.collector.PublicDataCollector;
+import egovframework.external.publicdata.transfer.LawTransferService;
 import egovframework.external.staging.StagingRunTracker;
 import egovframework.external.utility.Ulid;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p><b>배치를 닫는 규칙</b>: 각 단계는 끝날 때 스텝만 닫고, 배치는 "이 run에서 다음 단계로
  * 넘어갈 행이 더 없을 때" 그 단계가 닫는다. 그래서 수집이 0건이면 수집에서, 정제가 전부 실패하거나
- * 적재가 꺼져 있으면 정제에서, 법령(적재기 없음)은 정제에서, 공공데이터는 적재 재시도까지 전부
- * 끝난 뒤(LOADED 또는 LOAD_ABANDONED) 적재에서 닫힌다. 최종 상태는 거쳐온 단계 중 가장 나쁜 결과다
+ * 적재가 꺼져 있으면 정제에서, 법령은 Xenon 전송(SEND)이 꺼져 있으면(적재기 없음) 정제에서 켜져 있으면 전송에서,
+ * 공공데이터는 적재 재시도까지 전부 끝난 뒤(LOADED 또는 LOAD_ABANDONED) 적재에서 닫힌다. 최종 상태는 거쳐온 단계 중 가장 나쁜 결과다
  * - 수집이 PARTIAL이면 적재가 전부 성공해도 PARTIAL.</p>
  *
  * <p>같은 run을 두 단계가 동시에 만지지 않도록 {@link StagingRunTracker}로 잠근다 - 스케줄러
@@ -62,6 +64,7 @@ public class PublicDataPipelineRunner {
     private final PublicDataLoadService loadService;
     private final LogCollectorBatchService logCollectorBatchService;
     private final StagingRunTracker runTracker;
+    private final LawTransferService lawTransferService;
 
     /** 열려 있는 배치의 진행 상태, collectRunId별. */
     private final Map<String, RunState> openRuns = new ConcurrentHashMap<>();
@@ -212,6 +215,11 @@ public class PublicDataPipelineRunner {
             BatchHandle fresh = logCollectorBatchService.startCleanseBatch(dataTypeCd, executionType, triggerBy);
             CleanseResult result = cleanseService.cleanseRun(runId);
             logCollectorBatchService.finishCleanseBatch(fresh, result);
+            if (shouldSendLaw(dataTypeCd, result)) {
+                // 이어붙일 배치가 없어도(로그 컬렉터 꺼짐 등) 데이터는 보낸다 - 적재의 degrade 경로와 같은 방식.
+                BatchHandle sendBatch = logCollectorBatchService.startSendBatch(dataTypeCd, executionType, triggerBy);
+                logCollectorBatchService.finishSendBatch(sendBatch, lawTransferService.transfer(runId));
+            }
             return result;
         }
 
@@ -223,6 +231,11 @@ public class PublicDataPipelineRunner {
         state.worst = LogCollectorStatus.worst(state.worst,
             LogCollectorStatus.aggregate(result.successCount(), result.failCount()));
 
+        if (shouldSendLaw(dataTypeCd, result)) {
+            sendLawRun(runId, state, result);
+            return result;
+        }
+
         boolean handOffToLoad = !DataTypeClassifier.EXTERNAL_LAW.equals(dataTypeCd)
             && loadService.isEnabled()
             && loadService.peekRun(runId).isPresent();
@@ -231,6 +244,30 @@ public class PublicDataPipelineRunner {
             closeRun(runId, state, result.totalProcessed(), result.successCount(), result.failCount());
         }
         return result;
+    }
+
+    /** 법령은 전송이 켜져 있고 정제된 행이 하나라도 있을 때만 SEND 단계로 넘어간다. 꺼져 있으면 예전처럼 정제에서 닫는다. */
+    private boolean shouldSendLaw(String dataTypeCd, CleanseResult cleanse) {
+        return DataTypeClassifier.EXTERNAL_LAW.equals(dataTypeCd)
+            && lawTransferService.isEnabled()
+            && cleanse.successCount() > 0;
+    }
+
+    /**
+     * 법령(Xenon) 전송 단계 - 정제 직후 같은 배치에 SEND 스텝을 이어붙이고 거기서 배치를 닫는다. 배치의 최종 건수는 전송
+     * 대상(변경된 문서)이 있으면 그 건수, 변경이 없어 보낼 게 없었으면 정제 건수를 쓴다.
+     */
+    private void sendLawRun(String runId, RunState state, CleanseResult cleanse) {
+        Optional<BatchHandle> sendStep = logCollectorBatchService.continueBatchWithSendStep(state.execId);
+        SendResult send = lawTransferService.transfer(runId);
+        sendStep.ifPresent(h -> logCollectorBatchService.finishSendStepKeepBatchOpen(h, send));
+        state.worst = LogCollectorStatus.worst(state.worst,
+            LogCollectorStatus.aggregate(send.successCount(), send.failCount()));
+        if (send.totalProcessed() > 0) {
+            closeRun(runId, state, send.totalProcessed(), send.successCount(), send.failCount());
+        } else {
+            closeRun(runId, state, cleanse.totalProcessed(), cleanse.successCount(), cleanse.failCount());
+        }
     }
 
     // ── 적재 ──────────────────────────────────────────────

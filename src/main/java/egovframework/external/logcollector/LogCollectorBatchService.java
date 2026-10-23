@@ -5,6 +5,7 @@ import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.model.LoadResult;
+import egovframework.external.model.SendResult;
 import lombok.RequiredArgsConstructor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,7 +26,7 @@ import java.util.Optional;
  * private-doc/log-collector-api-spec.md §8 참고 - 이 클래스는 그 설계를 코드로 옮긴 것.
  *
  * <p><b>배치 경계(2026-09-29 변경)</b>: 수집 실행 1회 = 배치(execId) 1개이고, 그 수집의 정제·적재가
- * 같은 execId에 CLEANSE·STORE 스텝을 이어붙인다(법령은 적재 단계 없이 정제에서 닫음). 예전(§8)엔
+ * 같은 execId에 CLEANSE·STORE 스텝을 이어붙인다(법령은 적재 단계 없이 정제에서 닫거나, Xenon 전송이 켜져 있으면 SEND 스텝을 붙여 거기서 닫음). 예전(§8)엔
  * 정제가 여러 수집 결과를 한꺼번에 처리해서 단계마다 별도 배치를 썼는데, 정제·적재를 수집 실행
  * 단위로 바꾸면서 연결했다 - 흐름 제어는 {@code PublicDataPipelineRunner}. 이어받기에 실패하면
  * 기존처럼 그 단계만의 새 배치({@link #startCleanseBatch}/{@link #startLoadBatch})로 남긴다.</p>
@@ -48,6 +49,9 @@ public class LogCollectorBatchService {
     private static final String STEP_CLEANSE = "CLEANSE";
     // C05 공통코드 stepTypeCd(COLLECT/CLEANSE/ANALYZE/DEIDENT/STORE/SEND) 중 적재는 STORE에 대응.
     private static final String STEP_STORE = "STORE";
+    // 법령(EXTERNAL_LAW)의 체인은 COLLECT→CLEANSE→SEND이다(서버 StepType 정의). 법령 전송은 STORE가 아니라 SEND로 기록해야
+    // 서버가 정한 체인 순번(3)에 맞는다.
+    private static final String STEP_SEND = "SEND";
 
     private static final int STALE_LOOKBACK_DAYS = 7;
     private static final int STALE_PAGE_SIZE = 200;
@@ -111,6 +115,12 @@ public class LogCollectorBatchService {
         return start(jobNm, dataTypeCd, executionType, triggerBy, STEP_STORE);
     }
 
+    /** 법령 전송(Xenon) 배치 시작 - {@link #startLoadBatch}와 같은 역할의 SEND 버전(이어붙일 배치가 없을 때만 쓴다). */
+    public BatchHandle startSendBatch(String dataTypeCd, ExecutionType executionType, String triggerBy) {
+        String jobNm = "외부연계 전송" + categoryLabel(dataTypeCd);
+        return start(jobNm, dataTypeCd, executionType, triggerBy, STEP_SEND);
+    }
+
     private String categoryLabel(String dataTypeCd) {
         return DataTypeClassifier.EXTERNAL_LAW.equals(dataTypeCd) ? " (법령)" : " (공공데이터)";
     }
@@ -129,6 +139,14 @@ public class LogCollectorBatchService {
 
     /** Cleanse 배치 종료. */
     public void finishCleanseBatch(BatchHandle handle, CleanseResult result) {
+        if (!handle.active()) {
+            return;
+        }
+        finish(handle, result.totalProcessed(), result.successCount(), result.failCount());
+    }
+
+    /** Send 배치 종료. */
+    public void finishSendBatch(BatchHandle handle, SendResult result) {
         if (!handle.active()) {
             return;
         }
@@ -164,6 +182,14 @@ public class LogCollectorBatchService {
      */
     public Optional<BatchHandle> continueBatchWithLoadStep(String execId) {
         return continueBatchWithStep(execId, 3, STEP_STORE);
+    }
+
+    /**
+     * 이미 열려있는 배치(execId)에 SEND(법령 Xenon 전송) 스텝만 추가한다 - 법령 전용. cleanse가
+     * {@link #finishCleanseStepKeepBatchOpen}으로 배치를 열어둔 경우 같은 execId 아래 stepSeq=3으로 이어붙인다.
+     */
+    public Optional<BatchHandle> continueBatchWithSendStep(String execId) {
+        return continueBatchWithStep(execId, 3, STEP_SEND);
     }
 
     private Optional<BatchHandle> continueBatchWithStep(String execId, int stepSeq, String stepTypeCd) {
@@ -219,6 +245,14 @@ public class LogCollectorBatchService {
      * (로그 컬렉터 서버의 재진입 단계 규칙).
      */
     public void finishLoadStepKeepBatchOpen(BatchHandle handle, LoadResult result) {
+        if (!handle.active()) {
+            return;
+        }
+        finish(handle, result.totalProcessed(), result.successCount(), result.failCount(), false);
+    }
+
+    /** Send(SEND) 스텝만 종료하고 배치는 열어둔다 - 이어서 {@link #closeBatch}가 최종 상태로 닫는다. */
+    public void finishSendStepKeepBatchOpen(BatchHandle handle, SendResult result) {
         if (!handle.active()) {
             return;
         }

@@ -233,6 +233,32 @@ public-data:
     # db일 때만 AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개 - Load를 안 켜도
     # 이것만 db로 쓸 수 있음). db 조회 실패 시 그날 수집만 0건으로 건너뜀, 앱은 안 죽음.
     law-target-source: ${PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE:csv}
+  # 법령 Xenon(GenOS) 전송 - 정제가 끝난 법령/행정규칙(본문 JSON + 별표·첨부)을 ZIP으로 묶어 보낸다.
+  # 법령 체인의 마지막(SEND) 단계 (LawTransferService). 규약: private-doc/xenon_protocol.pdf.
+  # 기본 꺼짐 - API 키 발급과 Xenon 쪽 폴더 구조 합의 후 LAW_TRANSFER_ENABLED=true + XENON_API_KEY 로 켠다.
+  law-transfer:
+    enabled: ${LAW_TRANSFER_ENABLED:false}
+    xenon:
+      base-url: ${XENON_BASE_URL:https://genos.genon.ai/api/gateway/code_serving/800}
+      # Bearer 토큰 - 값은 K8s Secret 으로만 주입한다(저장소/로그에 남기지 않는다).
+      api-key: ${XENON_API_KEY:}
+      max-attempts: ${XENON_MAX_ATTEMPTS:3}
+      upload-timeout: ${XENON_UPLOAD_TIMEOUT:10m}
+    # ZIP 하나의 상한(압축 후). 전체가 수백 MB라 넘으면 ZIP을 나눠 보낸다. Xenon 쪽 상한은 아직 모른다 - 확인 후 조정.
+    max-zip-bytes: ${LAW_TRANSFER_MAX_ZIP_BYTES:52428800}
+    # true면 변경 여부와 무관하게 매번 전체를 보낸다(기본은 지난번에 보낸 것과 본문이 같은 문서는 제외).
+    send-all: ${LAW_TRANSFER_SEND_ALL:false}
+    # 별표 이미지(GIF)는 같은 내용의 PDF가 있어 기본으로 뺀다.
+    include-images: ${LAW_TRANSFER_INCLUDE_IMAGES:false}
+    # 규약상 허용 확장자. 행정규칙 첨부 중 zip 5건은 여기 없어서 건너뛰고 manifest 에 사유를 남긴다.
+    allowed-extensions: hwp,hwpx,pdf,doc,docx,png,jpg,jpeg,gif
+    # 보낸 기록 파일(영속 볼륨 경로). 비우면 메모리에만 둬서 재시작/배포 후 첫 수집에 전체를 다시 보낸다.
+    ledger-file: ${LAW_TRANSFER_LEDGER_FILE:}
+    download:
+      concurrency: ${LAW_TRANSFER_DOWNLOAD_CONCURRENCY:4}
+      max-bytes: 52428800
+      max-attempts: 3
+      timeout: 60s
   # 재난안전데이터공유플랫폼(행정안전부_긴급재난문자, DSSP-IF-00247) - 2026-08-14 신규.
   # 서비스키 승인 대기 중이라 아직 라이브 미검증 - 응답 필드는 사용자가 제공한 공식 샘플
   # (private-doc/safetydata.csv)로 확정했지만, 요청 파라미터/응답 envelope은 추정값임

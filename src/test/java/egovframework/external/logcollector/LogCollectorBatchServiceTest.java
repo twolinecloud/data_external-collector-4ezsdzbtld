@@ -5,6 +5,7 @@ import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.model.LoadResult;
+import egovframework.external.model.SendResult;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
@@ -456,6 +457,74 @@ class LogCollectorBatchServiceTest {
         ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
         verify(client).finishStep(eq("exec103"), stepCaptor.capture());
         assertThat(stepCaptor.getValue().getString("stepStsCd")).isEqualTo("PARTIAL");
+        verify(client, never()).finishBatch(any(), any());
+    }
+
+    @Test
+    void send_배치_시작시_법령_jobNm과_stepTypeCd가_SEND로_고정된다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createBatch(any())).thenReturn(Optional.of("exec1"));
+        when(client.createStep(anyString(), any())).thenReturn(Optional.of("step1"));
+
+        service().startSendBatch(DataTypeClassifier.EXTERNAL_LAW, ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createBatch(batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getString("jobNm")).isEqualTo("외부연계 전송 (법령)");
+        assertThat(batchCaptor.getValue().getString("dataTypeCd")).isEqualTo("EXTERNAL_LAW");
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createStep(eq("exec1"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("SEND");
+    }
+
+    @Test
+    void send_종료시_SendResult_건수를_그대로_배치에_반영한다() {
+        BatchHandle handle = new BatchHandle("exec3", "step3", java.time.LocalDateTime.now().minusSeconds(1), true);
+
+        service().finishSendBatch(handle, new SendResult(12, 9, 3));
+
+        ArgumentCaptor<JSONObject> batchCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishBatch(eq("exec3"), batchCaptor.capture());
+        assertThat(batchCaptor.getValue().getInt("targetCnt")).isEqualTo(12);
+        assertThat(batchCaptor.getValue().getInt("successCnt")).isEqualTo(9);
+        assertThat(batchCaptor.getValue().getInt("failCnt")).isEqualTo(3);
+        assertThat(batchCaptor.getValue().getString("execStsCd")).isEqualTo("PARTIAL");
+    }
+
+    @Test
+    void continueBatchWithSendStep은_기존_execId에_stepSeq3_SEND로_스텝만_추가한다() {
+        when(client.isEnabled()).thenReturn(true);
+        when(client.createStep(eq("20261023EXT001"), any())).thenReturn(Optional.of("20261023EXT00103"));
+
+        Optional<BatchHandle> handle = service().continueBatchWithSendStep("20261023EXT001");
+
+        assertThat(handle).isPresent();
+        assertThat(handle.get().execId()).isEqualTo("20261023EXT001");
+        verify(client, never()).createBatch(any());
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).createStep(eq("20261023EXT001"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getInt("stepSeq")).isEqualTo(3);
+        assertThat(stepCaptor.getValue().getString("stepTypeCd")).isEqualTo("SEND");
+    }
+
+    @Test
+    void continueBatchWithSendStep은_비활성화_상태면_빈값을_반환한다() {
+        when(client.isEnabled()).thenReturn(false);
+
+        assertThat(service().continueBatchWithSendStep("exec1")).isEmpty();
+        verify(client, never()).createStep(any(), any());
+    }
+
+    @Test
+    void finishSendStepKeepBatchOpen은_step만_종료하고_배치는_닫지_않는다() {
+        BatchHandle handle = new BatchHandle("exec1", "exec103", java.time.LocalDateTime.now(), true);
+
+        service().finishSendStepKeepBatchOpen(handle, new SendResult(10, 10, 0));
+
+        ArgumentCaptor<JSONObject> stepCaptor = ArgumentCaptor.forClass(JSONObject.class);
+        verify(client).finishStep(eq("exec103"), stepCaptor.capture());
+        assertThat(stepCaptor.getValue().getString("stepStsCd")).isEqualTo("SUCCESS");
         verify(client, never()).finishBatch(any(), any());
     }
 
