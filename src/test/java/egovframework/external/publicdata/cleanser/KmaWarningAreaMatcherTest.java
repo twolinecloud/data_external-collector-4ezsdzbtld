@@ -229,4 +229,12 @@ class KmaWarningAreaMatcherTest {
         assertThat(KmaWarningAreaMatcher.unrecognizedAreas("(1) 호우주의보 발표 : 신설광역시(포항), 경기도(수원)", null))
             .containsExactly("신설광역시");
     }
+
+    @Test
+    void 인천영종은_별도_구역이라_미추홀구_시설에_매칭되지_않는다() {
+        String title = "[특보] 제10-41호 : 2026.10.19.02:00 / 강풍주의보 발표 (*)";
+
+        assertThat(KmaWarningAreaMatcher.matches(title, "강풍주의보 발표", "(1) 강풍주의보 발표 : 인천(인천영종, 강화)", null, incheon)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(title, "강풍주의보 발표", "(1) 강풍주의보 발표 : 인천(인천영종, 인천남부)", null, incheon)).isTrue();
+    }
 }
