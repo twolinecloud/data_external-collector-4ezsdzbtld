@@ -225,14 +225,13 @@ public-data:
     endpoint: ${MOLEG_ENDPOINT:https://www.law.go.kr/DRF/lawService.do}
     # OC(이용자ID)는 법제처에서 별도 발급받는 값 - 로컬 .env에만 있고 git엔 안 올라감
     oc: ${MOLEG_OC:}
-    # 형사법령 목록은 classpath:moleg-criminal-laws.csv (모법 22개 + 시행령/시행규칙 22개,
-    # 총 44건) - MolegLawListLoader가 읽어서 MolegLawCollectorFactory가 법령별 컬렉터를
-    # 생성한다. 목록 추가/변경은 그 CSV만 고치면 됨.
-    # 법령 "수집 대상 목록"의 출처 - csv(기본값, 지금까지와 동일) | db(admin-db
-    # tb_ext_law_target에서 매 수집 틱마다 새로 조회, 관리자 콘솔 편집 반영용, 2026-08-21).
-    # db일 때만 AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개 - Load를 안 켜도
-    # 이것만 db로 쓸 수 있음). db 조회 실패 시 그날 수집만 0건으로 건너뜀, 앱은 안 죽음.
-    law-target-source: ${PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE:csv}
+    # 법령·행정규칙 수집 대상 목록(491건)의 출처 - db(기본값, 2026-10-23~) | csv.
+    # db: admin-db kcais.tb_ext_law_target 에서 매 수집 틱마다 새로 조회한다(관리자 콘솔 편집이 재시작 없이 다음 틱부터 반영).
+    #     조회가 실패하면 그날 수집만 0건으로 건너뛰고 앱은 안 죽는다. 이관 스크립트: scripts/migrate-law-target-to-db.sql
+    #     (배포 전에 먼저 실행 - 테이블이 옛 60건이거나 doc_type_cd 컬럼이 없으면 수집이 줄거나 0건이 된다).
+    # csv: classpath:moleg-criminal-laws.csv - 로컬 개발/롤백용으로 남겨 둔다(PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE=csv).
+    # db 일 때 AdminDbConfig 가 활성화된다(public-data.load.enabled 와는 별개).
+    law-target-source: ${PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE:db}
   # 법령 Xenon(GenOS) 전송 - 정제가 끝난 법령/행정규칙(본문 JSON + 별표·첨부)을 ZIP으로 묶어 보낸다.
   # 법령 체인의 마지막(SEND) 단계 (LawTransferService). 규약: private-doc/xenon_protocol.pdf.
   # 기본 꺼짐 - API 키 발급과 Xenon 쪽 폴더 구조 합의 후 LAW_TRANSFER_ENABLED=true + XENON_API_KEY 로 켠다.

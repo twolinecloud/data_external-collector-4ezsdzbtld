@@ -32,9 +32,14 @@ public class DbMolegLawTargetSource implements MolegLawTargetSource {
     @Override
     public List<MolegLaw> current() {
         try {
-            return mapper.selectActiveTargets().stream()
+            List<MolegLaw> laws = mapper.selectActiveTargets().stream()
                 .map(this::toMolegLaw)
                 .toList();
+            if (laws.isEmpty()) {
+                // 조회는 성공했는데 대상이 0건 - 테이블을 비웠거나 이관 전이라는 뜻이다. 조용히 0건 수집으로 끝나지 않게 남긴다.
+                logger.warn("[COLLECT] tb_ext_law_target 에 사용 중(active_yn='Y')인 대상이 0건 - 이번 틱은 수집할 법령이 없음");
+            }
+            return laws;
         } catch (Exception e) {
             logger.warn("[COLLECT] tb_ext_law_target 조회 실패 - 이번 틱은 0건으로 건너뜀 (admin-db 연결 확인 필요): {}",
                 e.getMessage());
@@ -43,9 +48,7 @@ public class DbMolegLawTargetSource implements MolegLawTargetSource {
     }
 
     private MolegLaw toMolegLaw(Map<String, Object> row) {
-        // doc_type_cd 컬럼은 아직 tb_ext_law_target에 없음(2026-08-28) - row.get()은 없는 키에
-        // null을 반환하므로 여기선 항상 null이 되고, MolegLaw.docTypeOrDefault()가 LAW로 취급한다.
-        // db 소스로 행정규칙까지 편집하려면 admin-db에 컬럼 추가 + 이 SELECT/맵핑 갱신이 먼저 필요.
+        // doc_type_cd(LAW | ADMIN_RULE)로 행정규칙을 구분한다. 값이 비어 있으면 MolegLaw.docTypeOrDefault()가 LAW로 취급.
         return new MolegLaw(
             str(row.get("lawId")), str(row.get("lawName")), str(row.get("mst")), str(row.get("lawType")),
             str(row.get("promulgationDate")), str(row.get("effectiveDate")), str(row.get("ministry")),

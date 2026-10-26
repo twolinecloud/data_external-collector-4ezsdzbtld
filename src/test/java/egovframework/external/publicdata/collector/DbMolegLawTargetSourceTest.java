@@ -38,6 +38,26 @@ class DbMolegLawTargetSourceTest {
     }
 
     @Test
+    void doc_type_cd로_행정규칙을_구분하고_값이_없으면_법령으로_취급한다() {
+        when(mapper.selectActiveTargets()).thenReturn(List.of(
+            Map.of("lawId", "35334", "lawName", "가석방 업무지침", "mst", "1", "lawType", "예규", "docType", "ADMIN_RULE"),
+            Map.of("lawId", "001692", "lawName", "형법", "mst", "2", "lawType", "법률", "docType", "LAW"),
+            Map.of("lawId", "000001", "lawName", "옛 행", "mst", "3", "lawType", "법률")));
+
+        List<MolegLaw> laws = new DbMolegLawTargetSource(mapper).current();
+
+        assertThat(laws).extracting(MolegLaw::docTypeOrDefault).containsExactly("ADMIN_RULE", "LAW", "LAW");
+        assertThat(laws.get(0).lawType()).isEqualTo("예규");
+    }
+
+    @Test
+    void 사용_중인_대상이_0건이어도_빈_리스트를_돌려주고_예외는_없다() {
+        when(mapper.selectActiveTargets()).thenReturn(List.of());
+
+        assertThat(new DbMolegLawTargetSource(mapper).current()).isEmpty();
+    }
+
+    @Test
     void DB_조회가_예외를_던지면_빈_리스트를_반환하고_예외를_전파하지_않는다() {
         when(mapper.selectActiveTargets()).thenThrow(new DataAccessResourceFailureException("connection refused"));
 
