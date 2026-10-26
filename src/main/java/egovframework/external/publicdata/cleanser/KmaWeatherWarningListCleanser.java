@@ -87,6 +87,20 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
         String t2 = item.optString("t2", null);
         String t6 = item.optString("t6", null);
 
+        // 구역을 모르면 매칭하지 않는다(KmaWarningAreaMatcher). 수집이 10분마다 같은 날 목록을 다시 받아 다음 주기에 통보문
+        // 조회가 성공하면 그때 들어오지만, 계속 실패하면 특보가 조용히 빠지므로 눈에 띄게 남긴다. 순수 해상 특보는 어차피
+        // 육상 시설에 매칭되지 않아 알릴 필요가 없다.
+        boolean noArea = (t2 == null || t2.isBlank()) && (t6 == null || t6.isBlank());
+        if (noArea && !KmaWarningAreaMatcher.isPureMarineWarning(title + " " + (t1 != null ? t1 : ""))) {
+            logger.warn("[CLEANSE] 기상특보 통보문 구역 정보 없음 - 시설 매칭을 보류함(다음 수집 주기에 재시도): stnId={}, title={}", stnId, title);
+            return;
+        }
+        List<String> unrecognized = KmaWarningAreaMatcher.unrecognizedAreas(t2, t6);
+        if (!unrecognized.isEmpty()) {
+            logger.warn("[CLEANSE] 기상특보 통보문에 알 수 없는 구역 이름이 있음 - 해당 시설이 매칭에서 빠질 수 있으니 매처 점검 필요: stnId={}, title={}, 구역={}",
+                stnId, title, unrecognized);
+        }
+
         for (FacilityMasterRecord facility : facilityMasterSource.current()) {
             // 1. 지점 관할 구역 필터링 (전국이 아닌 지방청인 경우 관할 시도에 속해야 함)
             if (!station.get().covers(facility.sido())) {

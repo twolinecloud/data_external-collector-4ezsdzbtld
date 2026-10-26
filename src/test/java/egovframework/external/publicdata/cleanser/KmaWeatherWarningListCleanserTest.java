@@ -32,23 +32,31 @@ class KmaWeatherWarningListCleanserTest {
     }
 
     @Test
-    void stnId_108_상세구역_없는_육상특보는_59개소_전부에_매칭된다() throws CleanseException {
+    void stnId_108_상세구역_없는_육상특보는_통보문_조회_실패로_보고_어느_기관에도_매칭하지_않는다() throws CleanseException {
+        // 구역을 모르는 채로 59개소 전부에 넣으면 안 된다(2026-10-15 강풍주의보가 수도권 13곳에 들어간 사례).
+        // 수집이 10분마다 다시 도므로 다음 주기에 통보문 조회가 성공하면 그때 매칭된다.
         String raw = new JSONArray()
             .put(new JSONObject().put("title", "호우주의보").put("stnId", "108").put("tmFc", 202608121000L).put("tmSeq", 35))
             .toString();
 
-        String result = cleanser.cleanse(raw);
+        assertThat(new JSONArray(cleanser.cleanse(raw)).length()).isZero();
+    }
 
-        JSONArray rows = new JSONArray(result);
-        assertThat(rows.length()).isEqualTo(59);
+    @Test
+    void stnId_108_상세구역이_전국_시도로_오면_해당_시도_기관에만_매칭된다() throws CleanseException {
+        String raw = new JSONArray()
+            .put(new JSONObject().put("title", "호우주의보").put("stnId", "108").put("tmFc", 202608121000L).put("tmSeq", 35)
+                .put("t2", "(1) 호우주의보 발표 : 서울특별시"))
+            .toString();
+
+        JSONArray rows = new JSONArray(cleanser.cleanse(raw));
+
+        assertThat(rows.length()).isEqualTo(3); // 서울 소재 기관 3곳
         Set<String> facilityIds = new HashSet<>();
         for (int i = 0; i < rows.length(); i++) {
-            JSONObject row = rows.getJSONObject(i);
-            assertThat(row.getString("title")).isEqualTo("호우주의보");
-            assertThat(row.getString("stnId")).isEqualTo("108");
-            facilityIds.add(row.getString("facilityId"));
+            facilityIds.add(rows.getJSONObject(i).getString("facilityId"));
         }
-        assertThat(facilityIds).hasSize(59); // 전부 서로 다른 기관
+        assertThat(facilityIds).hasSize(3);
     }
 
     @Test
@@ -144,7 +152,8 @@ class KmaWeatherWarningListCleanserTest {
     @Test
     void stnId_105는_강원특별자치도_소재_기관에만_매칭된다() throws CleanseException {
         String raw = new JSONArray()
-            .put(new JSONObject().put("title", "대설주의보").put("stnId", "105").put("tmFc", 202608121000L).put("tmSeq", 1))
+            .put(new JSONObject().put("title", "대설주의보").put("stnId", "105").put("tmFc", 202608121000L).put("tmSeq", 1)
+                .put("t2", "(1) 대설주의보 발표 : 강원도(영월, 춘천, 원주)"))
             .toString();
 
         String result = cleanser.cleanse(raw);

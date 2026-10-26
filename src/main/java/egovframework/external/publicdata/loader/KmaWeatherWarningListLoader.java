@@ -69,7 +69,7 @@ public class KmaWeatherWarningListLoader implements PublicDataLoader {
                 p.put("operationKey", dto.getOperationKey());
                 p.put("collectDtm", dto.getCollectedAt());
                 p.put("cleanseDtm", dto.getCleansedAt());
-                mapper.upsert(p);
+                mapper.insertIfAbsent(p);
             }
         } catch (Exception e) {
             throw new LoadException(dto.getSourceName(), dto.getApiName(), "적재 실패: " + e.getMessage(), e);

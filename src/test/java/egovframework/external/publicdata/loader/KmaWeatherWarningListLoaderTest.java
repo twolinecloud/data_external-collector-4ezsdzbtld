@@ -43,7 +43,7 @@ class KmaWeatherWarningListLoaderTest {
         loader().load(dto);
 
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
-        verify(mapper, times(1)).upsert(captor.capture());
+        verify(mapper, times(1)).insertIfAbsent(captor.capture());
         Map<String, Object> p = captor.getValue();
 
         assertThat(p.get("stnId")).isEqualTo("108");
@@ -65,7 +65,7 @@ class KmaWeatherWarningListLoaderTest {
         loader().load(dto);
 
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
-        verify(mapper, times(1)).upsert(captor.capture());
+        verify(mapper, times(1)).insertIfAbsent(captor.capture());
 
         assertThat(captor.getValue().get("rawJson")).asString().doesNotContain("facilityId");
     }
@@ -82,6 +82,6 @@ class KmaWeatherWarningListLoaderTest {
 
         loader().load(dto);
 
-        verify(mapper, times(2)).upsert(org.mockito.ArgumentMatchers.any());
+        verify(mapper, times(2)).insertIfAbsent(org.mockito.ArgumentMatchers.any());
     }
 }
