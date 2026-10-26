@@ -1,5 +1,6 @@
 package egovframework.external.publicdata.transfer;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,7 @@ public class HttpLawFileFetcher implements LawFileFetcher {
     private final int maxAttempts;
     private final Duration requestTimeout;
 
+    @Autowired
     public HttpLawFileFetcher(
         @Value("${public-data.law-transfer.download.max-bytes:52428800}") long maxBytes,
         @Value("${public-data.law-transfer.download.max-attempts:3}") int maxAttempts,

@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,7 @@ public class XenonIngestClient implements LawIngestPort {
     private final Duration uploadTimeout;
     private final long retryDelayMillis;
 
+    @Autowired
     public XenonIngestClient(
         @Value("${public-data.law-transfer.xenon.base-url}") String baseUrl,
         @Value("${public-data.law-transfer.xenon.api-key:}") String apiKey,
