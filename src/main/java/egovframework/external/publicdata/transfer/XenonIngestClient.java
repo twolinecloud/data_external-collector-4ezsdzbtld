@@ -98,6 +98,9 @@ public class XenonIngestClient implements LawIngestPort {
             } catch (IngestException e) {
                 last = e;
                 logger.warn("[SEND] Xenon 전송 실패 part={} attempt={}/{}: {}", part.index(), attempt, maxAttempts, e.getMessage());
+                if (!e.retryable()) {
+                    break; // 요청 자체가 잘못됐다는 응답이라 같은 ZIP을 다시 올려도 같다(수십 MB를 헛되이 반복하지 않는다)
+                }
                 if (attempt < maxAttempts) {
                     sleep(retryDelayMillis * attempt);
                 }
@@ -109,9 +112,19 @@ public class XenonIngestClient implements LawIngestPort {
     private Receipt uploadOnce(ZipPart part) throws IngestException {
         String boundary = "----law" + UUID.randomUUID().toString().replace("-", "");
         String fileName = part.file().getFileName().toString();
-        byte[] head = ("--" + boundary + "\r\n"
+        // Xenon 은 ZIP 안의 manifest.json 과 별개로 같은 요청의 'manifest' 필드를 요구한다(2026-10-27 실응답 422).
+        // 작은 필드를 먼저 보내고 ZIP 을 뒤에 붙인다.
+        byte[] manifest = (part.manifestJson() == null ? "" : part.manifestJson()).getBytes(StandardCharsets.UTF_8);
+        byte[] manifestHead = ("--" + boundary + "\r\n"
+            + "Content-Disposition: form-data; name=\"manifest\"\r\n"
+            + "Content-Type: application/json; charset=UTF-8\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] fileHead = ("\r\n--" + boundary + "\r\n"
             + "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n"
             + "Content-Type: application/zip\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] head = new byte[manifestHead.length + manifest.length + fileHead.length];
+        System.arraycopy(manifestHead, 0, head, 0, manifestHead.length);
+        System.arraycopy(manifest, 0, head, manifestHead.length, manifest.length);
+        System.arraycopy(fileHead, 0, head, manifestHead.length + manifest.length, fileHead.length);
         byte[] tail = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/v1/law/ingest"))
@@ -124,7 +137,9 @@ public class XenonIngestClient implements LawIngestPort {
             .build();
         HttpResponse<String> response = send(request);
         if (response.statusCode() != 200) {
-            throw new IngestException("Xenon 응답 HTTP " + response.statusCode() + ": " + abbreviate(response.body()));
+            int code = response.statusCode();
+            boolean clientError = code >= 400 && code < 500 && code != 408 && code != 429;
+            throw new IngestException("Xenon 응답 HTTP " + code + ": " + abbreviate(response.body()), !clientError);
         }
         return parse(response.body());
     }
@@ -209,7 +224,7 @@ public class XenonIngestClient implements LawIngestPort {
         if (s == null) {
             return "";
         }
-        return s.length() <= 300 ? s : s.substring(0, 300) + "...";
+        return s.length() <= 600 ? s : s.substring(0, 600) + "...";
     }
 
     private static void sleep(long millis) {

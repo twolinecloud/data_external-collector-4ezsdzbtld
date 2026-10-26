@@ -88,7 +88,10 @@ class LawZipWriterTest {
             JSONObject manifest;
             try (ZipFile z = new ZipFile(part.file().toFile(), StandardCharsets.UTF_8);
                  InputStream in = z.getInputStream(z.getEntry("manifest.json"))) {
-                manifest = new JSONObject(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+                String inZip = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                manifest = new JSONObject(inZip);
+                // Xenon 이 업로드 요청의 'manifest' 필드로 받는 내용은 ZIP 안의 manifest.json 과 같아야 한다
+                assertThat(part.manifestJson()).isEqualTo(inZip);
             }
             JSONObject d = manifest.getJSONArray("documents").getJSONObject(0);
             assertThat(manifest.getInt("documentCount")).isEqualTo(1);

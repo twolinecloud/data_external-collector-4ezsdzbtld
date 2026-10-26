@@ -74,7 +74,7 @@ class XenonIngestClientTest {
 
     private ZipPart part(byte[] content, int jsonCount, int topLevel) throws IOException {
         Path file = Files.write(dir.resolve("law-1.zip"), content);
-        return new ZipPart(1, file, LawZipWriter.sha256(content), content.length, jsonCount, 3, topLevel, List.of());
+        return new ZipPart(1, file, LawZipWriter.sha256(content), content.length, jsonCount, 3, topLevel, List.of(), "{\"documents\":[{\"lawId\":\"001692\"}]}");
     }
 
     private static String receipt(ZipPart p, boolean valid, long size, String sha, int json, int top) {
@@ -185,5 +185,44 @@ class XenonIngestClientTest {
 
         assertThatThrownBy(() -> client("super-secret-token", 2).upload(p))
             .satisfies(e -> assertThat(e.getMessage()).doesNotContain("super-secret-token"));
+    }
+
+    @Test
+    void manifest를_같은_요청의_manifest_필드로도_보낸다() throws Exception {
+        // 2026-10-27 실운영: file 만 보내자 422 "manifest 가 없습니다 — 같은 요청의 'manifest' 필드로 함께 보내주세요"
+        byte[] content = "PK-fake-zip-bytes".getBytes(StandardCharsets.UTF_8);
+        ZipPart p = part(content, 2, 1);
+        responder = f -> receipt(p, true, p.sizeBytes(), p.sha256(), 2, 1);
+
+        client("k", 1).upload(p);
+
+        String body = new String(bodies.get(0), StandardCharsets.UTF_8);
+        assertThat(body).contains("name=\"manifest\"").contains("Content-Type: application/json; charset=UTF-8")
+            .contains("{\"documents\":[{\"lawId\":\"001692\"}]}");
+        // manifest 가 파일보다 앞에 오고, 그래도 본문 길이를 미리 알려 chunked 를 피한다
+        assertThat(body.indexOf("name=\"manifest\"")).isLessThan(body.indexOf("name=\"file\""));
+        assertThat(contentLengths.get(0)).isEqualTo(String.valueOf(bodies.get(0).length));
+    }
+
+    @Test
+    void 요청이_잘못됐다는_400번대_응답은_같은_ZIP을_다시_올리지_않는다() throws Exception {
+        ZipPart p = part("abc".getBytes(StandardCharsets.UTF_8), 2, 1);
+        status = 422;
+        responder = f -> "{\"received\":false,\"error\":\"manifest 가 없습니다\"}";
+
+        assertThatThrownBy(() -> client("k", 3).upload(p)).hasMessageContaining("HTTP 422");
+
+        assertThat(bodies).hasSize(1); // 3번 시도하도록 설정했어도 한 번만 올린다
+    }
+
+    @Test
+    void 서버_오류_500은_재시도한다() throws Exception {
+        ZipPart p = part("abc".getBytes(StandardCharsets.UTF_8), 2, 1);
+        status = 500;
+        responder = f -> "{\"detail\":\"boom\"}";
+
+        assertThatThrownBy(() -> client("k", 3).upload(p)).hasMessageContaining("HTTP 500");
+
+        assertThat(bodies).hasSize(3);
     }
 }

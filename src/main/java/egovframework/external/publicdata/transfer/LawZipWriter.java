@@ -212,10 +212,11 @@ public class LawZipWriter implements AutoCloseable {
                 .put("part", index)
                 .put("documentCount", documents.size())
                 .put("documents", manifestDocs);
-            putEntry(MANIFEST, manifest.toString(2).getBytes(StandardCharsets.UTF_8));
+            String manifestJson = manifest.toString(2);
+            putEntry(MANIFEST, manifestJson.getBytes(StandardCharsets.UTF_8));
             zip.close();
             return new ZipPart(index, file, sha256(file), Files.size(file), documents.size(),
-                attachmentCount, topFolders.size(), List.copyOf(documents));
+                attachmentCount, topFolders.size(), List.copyOf(documents), manifestJson);
         }
 
         void abort() throws IOException {

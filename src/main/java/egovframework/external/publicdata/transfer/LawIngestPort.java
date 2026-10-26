@@ -19,12 +19,25 @@ public interface LawIngestPort {
     }
 
     class IngestException extends IOException {
+        private final boolean retryable;
+
         public IngestException(String message) {
+            this(message, true);
+        }
+
+        /** @param retryable 같은 요청을 다시 보내면 달라질 수 있는가 - 400번대 응답(요청이 잘못됨)은 다시 보내도 같다 */
+        public IngestException(String message, boolean retryable) {
             super(message);
+            this.retryable = retryable;
+        }
+
+        public boolean retryable() {
+            return retryable;
         }
 
         public IngestException(String message, Throwable cause) {
             super(message, cause);
+            this.retryable = true;
         }
     }
 }
