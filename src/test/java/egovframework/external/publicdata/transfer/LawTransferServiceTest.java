@@ -99,7 +99,7 @@ class LawTransferServiceTest {
         assertThat(result).isEqualTo(new SendResult(1, 1, 0));
         assertThat(ingest.uploads).hasSize(1);
         assertThat(ingest.uploads.get(0).entries).containsExactlyInAnyOrder(
-            "law/법률/형법/형법.json", "law/법률/형법/별표/별표1.hwp", "law/법률/형법/별표/별표1.pdf", "manifest.json");
+            "law/법률/형법/형법.json", "law/법률/형법/별표/별표1.hwp", "law/법률/형법/별표/별표1.pdf");
         assertThat(ledger.isUnchanged("LAW:1", LawTransferService.fingerprint(LawDocumentParser.parse(law("1", "형법", "법률", ANNEX)).get(0)))).isTrue();
         assertThat(status(row)).isEqualTo("LOAD_SKIPPED");
         assertThat(ingest.pingCount).isEqualTo(1);
@@ -333,8 +333,8 @@ class LawTransferServiceTest {
             }
             try (ZipFile zip = new ZipFile(part.file().toFile(), StandardCharsets.UTF_8)) {
                 List<String> names = zip.stream().map(ZipEntry::getName).toList();
-                String manifest = new String(zip.getInputStream(zip.getEntry("manifest.json")).readAllBytes(), StandardCharsets.UTF_8);
-                uploads.add(new Uploaded(part.file(), names, manifest));
+                // manifest 는 ZIP 이 아니라 업로드 요청의 별도 파트로 간다(Xenon 규약)
+                uploads.add(new Uploaded(part.file(), names, part.manifestJson()));
             } catch (IOException e) {
                 throw new IngestException("읽기 실패", e);
             }

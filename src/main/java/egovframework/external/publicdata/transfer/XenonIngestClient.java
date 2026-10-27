@@ -36,9 +36,8 @@ import java.util.UUID;
  * 대조해 하나라도 어긋나거나 zip.valid가 false면 재전송하라고 한다(같은 파일을 두 번 보내도 무해). 재전송은
  * {@code max-attempts}까지 한다.</p>
  *
- * <p><b>첫 실전 전송에서 확인할 것</b>: {@code zip.json}이 우리가 넣은 {@code manifest.json}을 세는지, {@code top_level_count}가
- * 폴더만 세는지 규약에 적혀 있지 않다. 그래서 json은 "본문 수" 또는 "본문 수 + manifest 1", 최상위 수는 "폴더 수" 또는
- * "폴더 수 + manifest 1"을 모두 맞는 것으로 본다(어느 쪽으로 왔는지는 INFO로 남김). 이 둘이 아닌 값이면 어긋남이다.</p>
+ * <p>요청은 멀티파트 두 파트다: {@code manifest}(파일, manifest.json)와 {@code file}(ZIP). manifest는 ZIP 안에 넣지 않으므로
+ * 응답의 {@code zip.json}은 본문 JSON 수, {@code top_level_count}는 최상위 폴더 수와 정확히 같아야 한다(2026-10-27).</p>
  */
 @Component
 public class XenonIngestClient implements LawIngestPort {
@@ -112,11 +111,12 @@ public class XenonIngestClient implements LawIngestPort {
     private Receipt uploadOnce(ZipPart part) throws IngestException {
         String boundary = "----law" + UUID.randomUUID().toString().replace("-", "");
         String fileName = part.file().getFileName().toString();
-        // Xenon 은 ZIP 안의 manifest.json 과 별개로 같은 요청의 'manifest' 필드를 요구한다(2026-10-27 실응답 422).
+        // Xenon 규약: manifest 는 ZIP 에 넣지 않고 같은 요청의 'manifest' 파트로 보낸다(없으면 422 "manifest 가 없습니다").
+        // 그 파트도 파일(UploadFile)이어야 해서 filename 을 붙인다 - 없으면 422 "Expected UploadFile, received: str".
         // 작은 필드를 먼저 보내고 ZIP 을 뒤에 붙인다.
         byte[] manifest = (part.manifestJson() == null ? "" : part.manifestJson()).getBytes(StandardCharsets.UTF_8);
         byte[] manifestHead = ("--" + boundary + "\r\n"
-            + "Content-Disposition: form-data; name=\"manifest\"\r\n"
+            + "Content-Disposition: form-data; name=\"manifest\"; filename=\"manifest.json\"\r\n"
             + "Content-Type: application/json; charset=UTF-8\r\n\r\n").getBytes(StandardCharsets.UTF_8);
         byte[] fileHead = ("\r\n--" + boundary + "\r\n"
             + "Content-Disposition: form-data; name=\"file\"; filename=\"" + fileName + "\"\r\n"
@@ -190,12 +190,10 @@ public class XenonIngestClient implements LawIngestPort {
         if (part.sizeBytes() != r.sizeBytes()) {
             throw new IngestException("size_bytes 불일치: 보냄=" + part.sizeBytes() + " 응답=" + r.sizeBytes());
         }
-        boolean jsonOk = r.zipJson() == part.jsonCount() || r.zipJson() == part.jsonCount() + 1;
-        if (!jsonOk) {
+        if (r.zipJson() != part.jsonCount()) {
             throw new IngestException("zip.json 불일치: 본문=" + part.jsonCount() + " 응답=" + r.zipJson());
         }
-        boolean topOk = r.topLevelCount() == part.topLevelFolders() || r.topLevelCount() == part.topLevelFolders() + 1;
-        if (!topOk) {
+        if (r.topLevelCount() != part.topLevelFolders()) {
             throw new IngestException("zip.top_level_count 불일치: 폴더=" + part.topLevelFolders() + " 응답=" + r.topLevelCount());
         }
         logger.info("[SEND] Xenon 수신 확인 part={} size={} json={}(본문 {}) top_level={}(폴더 {}) attachments={}(보냄 {})",

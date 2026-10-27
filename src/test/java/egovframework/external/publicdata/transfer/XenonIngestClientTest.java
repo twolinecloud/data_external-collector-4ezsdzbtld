@@ -103,11 +103,14 @@ class XenonIngestClientTest {
     }
 
     @Test
-    void manifest를_세는_응답도_받아들인다_json과_top_level이_하나_더_많아도() throws Exception {
+    void manifest를_ZIP에_넣지_않으므로_json과_top_level은_정확히_같아야_한다() throws Exception {
         ZipPart p = part("abc".getBytes(StandardCharsets.UTF_8), 2, 1);
-        responder = f -> receipt(p, true, p.sizeBytes(), p.sha256(), 3, 2);
 
-        assertThat(client("k", 1).upload(p).zipJson()).isEqualTo(3);
+        responder = f -> receipt(p, true, p.sizeBytes(), p.sha256(), 3, 1);
+        assertThatThrownBy(() -> client("k", 1).upload(p)).hasMessageContaining("zip.json 불일치");
+
+        responder = f -> receipt(p, true, p.sizeBytes(), p.sha256(), 2, 2);
+        assertThatThrownBy(() -> client("k", 1).upload(p)).hasMessageContaining("top_level_count 불일치");
     }
 
     @Test
@@ -197,7 +200,8 @@ class XenonIngestClientTest {
         client("k", 1).upload(p);
 
         String body = new String(bodies.get(0), StandardCharsets.UTF_8);
-        assertThat(body).contains("name=\"manifest\"").contains("Content-Type: application/json; charset=UTF-8")
+        // Xenon 은 manifest 도 파일(UploadFile)로 받는다 - filename 이 없으면 422 "Expected UploadFile, received: str"
+        assertThat(body).contains("name=\"manifest\"; filename=\"manifest.json\"").contains("Content-Type: application/json; charset=UTF-8")
             .contains("{\"documents\":[{\"lawId\":\"001692\"}]}");
         // manifest 가 파일보다 앞에 오고, 그래도 본문 길이를 미리 알려 chunked 를 피한다
         assertThat(body.indexOf("name=\"manifest\"")).isLessThan(body.indexOf("name=\"file\""));

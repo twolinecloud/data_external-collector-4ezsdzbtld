@@ -28,15 +28,14 @@ import java.util.zip.ZipOutputStream;
  * 넘을 것 같으면 새 ZIP으로 넘어간다 - 전체가 수백 MB라 하나로 보낼 수 없어서다. 문서는 쪼개지 않는다(법령 본문과
  * 그 별표는 항상 같은 ZIP). 문서 하나가 상한보다 크면 그 문서만 담은 ZIP이 상한을 넘긴다.
  *
- * <p>모든 ZIP 최상위에 {@code manifest.json}을 넣는다: 문서별 법령ID·종류·시행일·본문 sha256·첨부 목록(제목,
- * 원본 파일명, sha256)과 넣지 못한 첨부의 사유. 항목 이름은 UTF-8이다({@link ZipOutputStream}은 UTF-8로 쓰면 EFS 플래그를
+ * <p>ZIP마다 manifest(문서별 법령ID·종류·시행일·본문 sha256·첨부 목록(제목, 원본 파일명, sha256)과 넣지 못한 첨부의 사유)를
+ * 만들어 {@link ZipPart#manifestJson()}으로 넘긴다. <b>ZIP 안에는 넣지 않는다</b> - Xenon 규약은 manifest를 업로드 요청의
+ * 별도 파일 파트로 받는다(2026-10-27 확인). 항목 이름은 UTF-8이다({@link ZipOutputStream}은 UTF-8로 쓰면 EFS 플래그를
  * 세운다 - 규약이 요구하는 한글 이름 인코딩).</p>
  *
  * <p>스레드 안전하지 않다. {@link #finish}를 부르거나 {@link #close}로 열린 ZIP을 정리한다.</p>
  */
 public class LawZipWriter implements AutoCloseable {
-
-    private static final String MANIFEST = "manifest.json";
 
     private final Path dir;
     private final String prefix;
@@ -213,7 +212,6 @@ public class LawZipWriter implements AutoCloseable {
                 .put("documentCount", documents.size())
                 .put("documents", manifestDocs);
             String manifestJson = manifest.toString(2);
-            putEntry(MANIFEST, manifestJson.getBytes(StandardCharsets.UTF_8));
             zip.close();
             return new ZipPart(index, file, sha256(file), Files.size(file), documents.size(),
                 attachmentCount, topFolders.size(), List.copyOf(documents), manifestJson);

@@ -39,7 +39,7 @@ class LawZipWriterTest {
     }
 
     @Test
-    void 규약_레이아웃으로_쓰고_manifest를_최상위에_넣는다() throws Exception {
+    void 규약_레이아웃으로_쓰고_manifest는_ZIP에_넣지_않는다() throws Exception {
         try (LawZipWriter writer = new LawZipWriter(dir, "law", 10_000_000, Instant.parse("2026-10-23T00:00:00Z"))) {
             assertThat(writer.add(new PreparedDocument(doc("LAW", "1", "형법", "법률"),
                 List.of(file("별표", "별표1", "hwp", 10), file("별표", "별표1", "pdf", 20)), List.of()))).isNull();
@@ -51,8 +51,9 @@ class LawZipWriterTest {
                 "law/법률/형법/형법.json",
                 "law/법률/형법/별표/별표1.hwp",
                 "law/법률/형법/별표/별표1.pdf",
-                "law/시행령/마약류 관리에 관한 법률 시행령/마약류 관리에 관한 법률 시행령.json",
-                "manifest.json");
+                "law/시행령/마약류 관리에 관한 법률 시행령/마약류 관리에 관한 법률 시행령.json");
+            // Xenon 규약: manifest 는 업로드 요청의 별도 파트로 보낸다
+            assertThat(new JSONObject(part.manifestJson()).getInt("documentCount")).isEqualTo(2);
             assertThat(part.jsonCount()).isEqualTo(2);
             assertThat(part.attachmentCount()).isEqualTo(2);
             assertThat(part.topLevelFolders()).isEqualTo(1);
@@ -85,14 +86,10 @@ class LawZipWriterTest {
                 List.of(new PreparedDocument.SkippedFile("자료.zip", "첨부", "허용되지 않는 확장자(zip)"))));
             ZipPart part = writer.finish();
 
-            JSONObject manifest;
-            try (ZipFile z = new ZipFile(part.file().toFile(), StandardCharsets.UTF_8);
-                 InputStream in = z.getInputStream(z.getEntry("manifest.json"))) {
-                String inZip = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-                manifest = new JSONObject(inZip);
-                // Xenon 이 업로드 요청의 'manifest' 필드로 받는 내용은 ZIP 안의 manifest.json 과 같아야 한다
-                assertThat(part.manifestJson()).isEqualTo(inZip);
+            try (ZipFile z = new ZipFile(part.file().toFile(), StandardCharsets.UTF_8)) {
+                assertThat(z.getEntry("manifest.json")).isNull();
             }
+            JSONObject manifest = new JSONObject(part.manifestJson());
             JSONObject d = manifest.getJSONArray("documents").getJSONObject(0);
             assertThat(manifest.getInt("documentCount")).isEqualTo(1);
             assertThat(d.getString("path")).isEqualTo("admrul/예규/가석방 업무지침/가석방 업무지침.json");
