@@ -51,6 +51,12 @@ public class DbFacilityMasterSource implements FacilityMasterSource {
             (String) row.get("sidoNm"),
             (String) row.get("sigunguNm"),
             String.valueOf(row.get("nx")),
-            String.valueOf(row.get("ny")));
+            String.valueOf(row.get("ny")),
+            toDouble(row.get("lat")),
+            toDouble(row.get("lon")));
+    }
+
+    private static Double toDouble(Object value) {
+        return value instanceof Number n ? n.doubleValue() : null;
     }
 }

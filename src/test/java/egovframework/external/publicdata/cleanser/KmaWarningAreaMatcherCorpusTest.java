@@ -1,6 +1,8 @@
 package egovframework.external.publicdata.cleanser;
 
 import egovframework.external.publicdata.collector.FacilityMasterRecord;
+import egovframework.external.publicdata.collector.KmaWarningZone;
+import egovframework.external.publicdata.collector.KmaWarningZoneDirectoryFixture;
 import egovframework.external.publicdata.collector.KmaWarningStation;
 import egovframework.external.publicdata.collector.KmaWarningStationLoader;
 import org.json.JSONObject;
@@ -71,7 +73,8 @@ class KmaWarningAreaMatcherCorpusTest {
         for (String l : Files.readAllLines(Path.of("src/main/resources/kma-facility-locations.csv"))) {
             String[] c = l.split(",");
             if (c.length >= 6 && c[0].matches("\\d+")) {
-                list.add(new FacilityMasterRecord(c[0], c[1], c[2], c[3], c[4], c[5]));
+                list.add(new FacilityMasterRecord(c[0], c[1], c[2], c[3], c[4], c[5],
+                    Double.valueOf(c[6]), Double.valueOf(c[7])));
             }
         }
         return list;
@@ -90,7 +93,8 @@ class KmaWarningAreaMatcherCorpusTest {
                 if (station == null || !station.covers(f.sido())) {
                     continue;
                 }
-                boolean matched = KmaWarningAreaMatcher.matches(b.title(), b.t1(), b.t2(), b.t6(), f);
+                KmaWarningZone zone = KmaWarningZoneDirectoryFixture.zoneOf(f);
+                boolean matched = KmaWarningAreaMatcher.matches(b.title(), b.t1(), b.t2(), b.t6(), f, zone);
                 boolean provinceMentioned = PROVINCE_NAMES.getOrDefault(f.sido(), List.of()).stream().anyMatch(areaText::contains);
                 if (matched && !provinceMentioned) {
                     violations.add(f.facilityName() + " <- " + b.title() + " | " + areaText.replace('\n', '/'));
@@ -118,5 +122,37 @@ class KmaWarningAreaMatcherCorpusTest {
         }
         // 인천(옹진 제외), 인천(강화, 인천남부, 인천북부) 형식의 통보문이 실제로 있었다
         assertThat(incheonMatches).isGreaterThanOrEqualTo(6);
+    }
+
+    @Test
+    void 시설_구역을_쓰면_같은_시군의_다른_세분_구역_통보문에_매칭되지_않는다() throws IOException {
+        // 통보문에 시설 시군의 세분 구역만 나오고 그게 시설 구역이 아니면 매칭되면 안 된다(예: 군산교도소 <- 군산어청도)
+        List<String> violations = new ArrayList<>();
+        for (Bulletin b : bulletins()) {
+            for (FacilityMasterRecord f : facilities()) {
+                KmaWarningZone zone = KmaWarningZoneDirectoryFixture.zoneOf(f);
+                if (zone == null || !KmaWarningAreaMatcher.matches(b.title(), b.t1(), b.t2(), b.t6(), f, zone)) {
+                    continue;
+                }
+                String text = (b.t2() != null && !b.t2().isBlank()) ? b.t2() : b.t6();
+                boolean mentionsOwnZone = zone.names().stream().anyMatch(n -> text.contains(n.replaceAll("\\(.*", "")));
+                boolean onlyOtherSubZones = text.contains(zone.areaPrefix()) && !mentionsOwnZone
+                    && !text.matches("(?s).*[(,]\\s*" + zone.areaPrefix() + "(시|군)?\\s*[),].*");
+                if (onlyOtherSubZones && !wholeProvinceListed(text, f)) {
+                    violations.add(f.facilityName() + "(" + zone.name() + ") <- " + text.replace('\n', '/'));
+                }
+            }
+        }
+        assertThat(violations).isEmpty();
+    }
+
+    /**
+     * 시·도 전체 발표("경상북도", "서울특별시")와 일부만 뺀 발표("인천(옹진 제외)")는 세분 구역과 상관없이 매칭된다.
+     * 제외 표현에 시설 구역이 들어 있는지는 매처 단위 테스트가 본다.
+     */
+    private static boolean wholeProvinceListed(String text, FacilityMasterRecord f) {
+        return PROVINCE_NAMES.getOrDefault(f.sido(), List.of()).stream()
+            .anyMatch(p -> text.matches("(?s).*(^|[:,]\\s*)" + p + "[^(,\\n]*(,|$|\\n).*")
+                || text.matches("(?s).*" + p + "[^(,\\n]*\\([^()]*제외\\).*"));
     }
 }

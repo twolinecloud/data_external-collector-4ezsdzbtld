@@ -42,7 +42,8 @@ public interface WeatherFacilityMapper {
     // 좌표를 넘긴 건이면 NULL일 수 있음(WeatherFacilityMapper#upsert 참고).
     @Select("""
         SELECT facility_id AS "facilityId", facility_nm AS "facilityNm",
-               sido_nm AS "sidoNm", sigungu_nm AS "sigunguNm", nx AS "nx", ny AS "ny"
+               sido_nm AS "sidoNm", sigungu_nm AS "sigunguNm", nx AS "nx", ny AS "ny",
+               lat AS "lat", lon AS "lon"
         FROM kcais.tb_ext_weather_facility
         """)
     List<Map<String, Object>> selectAll();

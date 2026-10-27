@@ -47,7 +47,8 @@ public class FacilityMasterCsvLoader {
                 }
                 String[] cols = line.split(",", -1);
                 // facilityId,facilityName,sido,sigungu,nx,ny,lat,lon
-                result.add(new FacilityMasterRecord(cols[0], cols[1], cols[2], cols[3], cols[4], cols[5]));
+                result.add(new FacilityMasterRecord(cols[0], cols[1], cols[2], cols[3], cols[4], cols[5],
+                    parseCoord(cols, 6), parseCoord(cols, 7)));
             }
         } catch (IOException e) {
             throw new IllegalStateException("기관 기준정보 리소스(" + RESOURCE_PATH + ") 로딩 실패", e);
@@ -56,5 +57,16 @@ public class FacilityMasterCsvLoader {
             throw new IllegalStateException("기관 기준정보 리소스(" + RESOURCE_PATH + ")에 데이터가 없음");
         }
         return result;
+    }
+
+    private static Double parseCoord(String[] cols, int index) {
+        if (cols.length <= index || cols[index].isBlank()) {
+            return null;
+        }
+        try {
+            return Double.valueOf(cols[index].trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

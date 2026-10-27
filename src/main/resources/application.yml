@@ -197,6 +197,13 @@ public-data:
       # (2026-08-24, cleanse-db-schema-spec.md §2.8 참고) - 시군구가 아니라 시도 단위 생산.
       endpoint: ${LIVING_WTHR_IDX_ENDPOINT:https://apis.data.go.kr/1360000/LivingWthrIdxServiceV5}
       service-key: ${LIVING_WTHR_IDX_SERVICE_KEY:}
+    warning-zone:
+      # 기상특보 세분 구역(홍성동부/홍성서부, 인천남부/인천북부, 군산 육지/어청도 등)을 시설 위경도로 정하는 자료 - 2026-10-27.
+      # API허브 "AWS가 속한 특보구역 코드(특보구역명 포함)"(관측소 위경도 + 소속 특보구역). 인증키는 ASOS와 같은
+      # KMA_APIHUB_AUTH_KEY(asos-hourly.auth-key). 하루 한 번 새로 받고, 못 받으면 시군 단위로 매칭한다(예전 동작).
+      # 계산 결과는 [WARN-ZONE] 로그로 남고, 다른 구역 관측소와 3km 안쪽이면 경계 근처라 WARN 으로 남긴다.
+      endpoint: ${KMA_WARNING_ZONE_ENDPOINT:https://apihub.kma.go.kr/api/typ01/url/wrn_reg_aws2.php}
+      refresh-cron: "0 40 4 * * *"
     asos-hourly:
       # 지상 종관기상관측(ASOS) 시간자료 - 2026-09-03 신규. 날씨 기호 요구사항의 안개/박무/연무용.
       #

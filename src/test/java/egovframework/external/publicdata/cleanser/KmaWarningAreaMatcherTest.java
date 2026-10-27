@@ -2,6 +2,7 @@
 package egovframework.external.publicdata.cleanser;
 
 import egovframework.external.publicdata.collector.FacilityMasterRecord;
+import egovframework.external.publicdata.collector.KmaWarningZone;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -236,5 +237,47 @@ class KmaWarningAreaMatcherTest {
 
         assertThat(KmaWarningAreaMatcher.matches(title, "강풍주의보 발표", "(1) 강풍주의보 발표 : 인천(인천영종, 강화)", null, incheon)).isFalse();
         assertThat(KmaWarningAreaMatcher.matches(title, "강풍주의보 발표", "(1) 강풍주의보 발표 : 인천(인천영종, 인천남부)", null, incheon)).isTrue();
+    }
+
+    // --- 2026-10-27 시설 위치로 계산한 특보 세분 구역(KmaWarningZone) ---
+
+    private final FacilityMasterRecord hongseong = new FacilityMasterRecord("1270524", "홍성교도소", "충청남도", "홍성군", "55", "106");
+    private final FacilityMasterRecord gunsan = new FacilityMasterRecord("1270460", "군산교도소", "전북특별자치도", "군산시", "56", "92");
+    private static final KmaWarningZone HONGSEONG_EAST = new KmaWarningZone("L1032010", "홍성동부", "홍성", 8.3, "홍성서부", 12.9);
+    private static final KmaWarningZone GUNSAN_MAINLAND = new KmaWarningZone("L1061610", "군산(옥도면 제외)", "군산", 9.3, null, null);
+    private static final KmaWarningZone SEOUL_SOUTHEAST = new KmaWarningZone("L1100100", "서울동남권", "서울", 1.2, "서울동북권", 6.7);
+
+    @Test
+    void 세분_구역을_알면_같은_시군의_다른_구역에는_매칭하지_않는다() {
+        String t1 = "강풍주의보 발표";
+
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 충청남도(서산, 홍성서부)", null, hongseong, HONGSEONG_EAST)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 충청남도(서산, 홍성동부)", null, hongseong, HONGSEONG_EAST)).isTrue();
+        // 시군 전체가 나오면 매칭
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 충청남도(홍성)", null, hongseong, HONGSEONG_EAST)).isTrue();
+        // 구역을 모르면 예전처럼 시군 단위(놓치지 않는 쪽)
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 충청남도(서산, 홍성서부)", null, hongseong, null)).isTrue();
+    }
+
+    @Test
+    void 육지_시설은_섬_구역_특보에_매칭되지_않는다() {
+        // 2026-10-27 실제 통보문: 군산교도소가 군산어청도·군산옥도면 특보에 매칭됐다
+        String t1 = "강풍주의보 발표";
+
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 전북자치도(군산어청도)", null, gunsan, GUNSAN_MAINLAND)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 전북자치도(군산옥도면(어청도 제외))", null, gunsan, GUNSAN_MAINLAND)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 전북자치도(군산(옥도면 제외), 김제)", null, gunsan, GUNSAN_MAINLAND)).isTrue();
+        assertThat(KmaWarningAreaMatcher.matches(LAND_TITLE, t1, "(1) 강풍주의보 발표 : 전북자치도(군산, 김제)", null, gunsan, GUNSAN_MAINLAND)).isTrue();
+    }
+
+    @Test
+    void 광역시_세분_구역도_시설_구역으로_가른다() {
+        // 예전에는 "서울(서울동남권)"처럼 광역시 안의 세분 구역이 오면 구 이름이 없어 서울 시설이 매칭되지 않았다
+        String t1 = "호우주의보 발표";
+        String title = "[특보] 제10-3호 / 호우주의보 발표 (*)";
+
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, "(1) 호우주의보 발표 : 서울(서울동남권, 서울동북권)", null, seoulDongbu, SEOUL_SOUTHEAST)).isTrue();
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, "(1) 호우주의보 발표 : 서울(서울서북권)", null, seoulDongbu, SEOUL_SOUTHEAST)).isFalse();
+        assertThat(KmaWarningAreaMatcher.matches(title, t1, "(1) 호우주의보 발표 : 서울특별시", null, seoulDongbu, SEOUL_SOUTHEAST)).isTrue();
     }
 }

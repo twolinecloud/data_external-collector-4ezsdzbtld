@@ -5,10 +5,13 @@ import egovframework.external.publicdata.collector.FacilityMasterRecord;
 import egovframework.external.publicdata.collector.FacilityMasterSource;
 import egovframework.external.publicdata.collector.KmaWarningStation;
 import egovframework.external.publicdata.collector.KmaWarningStationLoader;
+import egovframework.external.publicdata.collector.KmaWarningZone;
+import egovframework.external.publicdata.collector.KmaWarningZoneDirectory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -37,10 +40,19 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
 
     private final List<KmaWarningStation> stations;
     private final FacilityMasterSource facilityMasterSource;
+    /** 시설 위치로 특보 세분 구역을 정한다. null이면 시군 단위로만 매칭한다. */
+    private final KmaWarningZoneDirectory zoneDirectory;
 
     public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilityMasterSource facilityMasterSource) {
+        this(stationLoader, facilityMasterSource, null);
+    }
+
+    @Autowired
+    public KmaWeatherWarningListCleanser(KmaWarningStationLoader stationLoader, FacilityMasterSource facilityMasterSource,
+                                         KmaWarningZoneDirectory zoneDirectory) {
         this.stations = stationLoader.all();
         this.facilityMasterSource = facilityMasterSource;
+        this.zoneDirectory = zoneDirectory;
     }
 
     @Override
@@ -108,7 +120,8 @@ public class KmaWeatherWarningListCleanser implements PublicDataCleanser {
             }
 
             // 2. 통보문 상세 구역 및 해상특보 정밀 매칭
-            if (!KmaWarningAreaMatcher.matches(title, t1, t2, t6, facility)) {
+            KmaWarningZone zone = zoneDirectory == null ? null : zoneDirectory.resolve(facility).orElse(null);
+            if (!KmaWarningAreaMatcher.matches(title, t1, t2, t6, facility, zone)) {
                 continue;
             }
 

@@ -2,6 +2,7 @@
 package egovframework.external.publicdata.cleanser;
 
 import egovframework.external.publicdata.collector.FacilityMasterRecord;
+import egovframework.external.publicdata.collector.KmaWarningZone;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -76,6 +77,15 @@ public final class KmaWarningAreaMatcher {
      * @return 매칭 여부
      */
     public static boolean matches(String title, String t1, String t2, String t6, FacilityMasterRecord facility) {
+        return matches(title, t1, t2, t6, facility, null);
+    }
+
+    /**
+     * 시설의 특보 세분 구역({@link KmaWarningZone}, 위경도로 계산)을 알 때. 통보문 항목이 같은 시군의 세분 구역이면
+     * 시설 구역과 같을 때만 매칭한다("홍성동부" 시설에 "홍성서부"는 아님, 군산 육지 시설에 "군산어청도"는 아님).
+     * {@code zone}이 null이면 시군 단위로 매칭한다(세분 구역이 나와도 그 시군이면 매칭 - 놓치는 것보다 과하게 알리는 쪽).
+     */
+    public static boolean matches(String title, String t1, String t2, String t6, FacilityMasterRecord facility, KmaWarningZone zone) {
         // 1. 순수 해상 전용 특보 필터링 (풍랑/폭풍해일 단독)
         String combinedTitle = (title != null ? title : "") + " " + (t1 != null ? t1 : "");
         if (isPureMarineWarning(combinedTitle)) {
@@ -89,7 +99,7 @@ public final class KmaWarningAreaMatcher {
         if (areaText == null || areaText.isBlank()) {
             return false;
         }
-        return matchesAreaText(areaText, facility);
+        return matchesAreaText(areaText, facility, zone);
     }
 
     private static boolean containsMarineKeyword(String title) {
@@ -136,7 +146,7 @@ public final class KmaWarningAreaMatcher {
     /**
      * 통보문 구역 문자열(t2 또는 t6)과 시설의 시도/시군구 매칭.
      */
-    private static boolean matchesAreaText(String areaText, FacilityMasterRecord facility) {
+    private static boolean matchesAreaText(String areaText, FacilityMasterRecord facility, KmaWarningZone zone) {
         List<String> sidoKeywords = getSidoKeywords(facility.sido(), facility.sigungu());
         List<String> sigunguKeywords = getSigunguKeywords(facility.sigungu());
         if (sidoKeywords.isEmpty()) {
@@ -158,18 +168,48 @@ public final class KmaWarningAreaMatcher {
                 continue;
             }
             for (Item item : area.items()) {
+                Boolean byZone = zone == null ? null : matchByZone(item.name(), zone);
+                if (byZone != null) {
+                    if (byZone) {
+                        return true;
+                    }
+                    continue; // 같은 시군의 다른 세분 구역
+                }
                 if (itemMatches(item.name(), sigunguKeywords)) {
                     return true;
                 }
-                for (Map.Entry<String, Set<String>> zone : ZONE_MEMBERS.entrySet()) {
-                    if (item.name().startsWith(zone.getKey())
-                        && sigunguKeywords.stream().anyMatch(zone.getValue()::contains)) {
+                for (Map.Entry<String, Set<String>> member : ZONE_MEMBERS.entrySet()) {
+                    if (item.name().startsWith(member.getKey())
+                        && sigunguKeywords.stream().anyMatch(member.getValue()::contains)) {
                         return true;
                     }
                 }
             }
         }
         return false;
+    }
+
+    /**
+     * 시설 세분 구역으로 판정한다. 시설이 받는 구역(경계 근처면 이웃 구역 포함) 중 하나와 같으면 true, 시군 전체("홍성", "홍성군")면 true, 같은 시군의 다른 세분 구역이면 false,
+     * 이 시군과 무관한 항목이면 null(다른 규칙으로 판정).
+     */
+    private static Boolean matchByZone(String itemName, KmaWarningZone zone) {
+        for (String name : zone.names()) {
+            if (itemName.equals(stripParen(name))) { // "군산(옥도면 제외)" -> "군산"
+                return true;
+            }
+        }
+        String prefix = zone.areaPrefix();
+        if (prefix == null || !itemName.startsWith(prefix)) {
+            return null;
+        }
+        String rest = itemName.substring(prefix.length());
+        return rest.isEmpty() || rest.equals("시") || rest.equals("군") || rest.equals("구");
+    }
+
+    private static String stripParen(String name) {
+        int paren = name.indexOf('(');
+        return (paren >= 0 ? name.substring(0, paren) : name).trim();
     }
 
     /** 항목 이름이 시설 시군구 키워드와 같거나 그 키워드로 시작하는가 ("파주동북부"는 "파주"로 시작). */
