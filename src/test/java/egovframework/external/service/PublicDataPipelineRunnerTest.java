@@ -11,6 +11,7 @@ import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.model.SendResult;
 import egovframework.external.model.LoadResult;
+import egovframework.external.publicdata.collector.EndOfRunRetry;
 import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.publicdata.transfer.LawTransferService;
 import egovframework.external.staging.StagingRunTracker;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -107,6 +109,65 @@ class PublicDataPipelineRunnerTest {
     }
 
     // ── 수집 ──────────────────────────────────────────────
+
+    private static CollectResult failedWith(String failureLog) {
+        return new CollectResult("k", "s", "a", AttemptStatus.FAILED, 0, failureLog);
+    }
+
+    private void lawBatchWithNoRows() {
+        when(logCollectorBatchService.startCollectBatch(eq(LAW_OP), any(), any())).thenReturn(handle("exec-1", "exec-101"));
+        when(cleanseService.peekRun(anyString())).thenReturn(Optional.empty());
+    }
+
+    @Test
+    void 일시_오류로_실패한_법령은_한_바퀴_돈_뒤_기다렸다가_다시_시도하고_결과를_바꾼다() {
+        // 2026-10-27 05:04~05:46 KST 법제처 불안정 - 본문 없는 404가 수 ms 만에 왔고 몇 시간 뒤엔 정상이었다
+        PublicDataPipelineRunner r = runner();
+        List<Duration> waited = new ArrayList<>();
+        r.setSleeper(waited::add);
+        lawBatchWithNoRows();
+        when(collectorA.endOfRunRetry()).thenReturn(EndOfRunRetry.LAW);
+        when(collectionAttemptService.run(eq(collectorA), any(), anyString(), eq("exec-1")))
+            .thenReturn(failedWith("API 호출 실패: 404 Not Found on GET request for \"https://www.law.go.kr/DRF/lawService.do\": [no body]"))
+            .thenReturn(ok());
+
+        List<CollectResult> results = r.collect(LAW_OP, List.of(collectorA), ExecutionType.SCHEDULE, "scheduler:" + LAW_OP);
+
+        assertThat(results).containsExactly(ok());
+        verify(collectionAttemptService, times(2)).run(eq(collectorA), any(), anyString(), eq("exec-1"));
+        assertThat(waited).containsExactly(Duration.ofMinutes(3));
+        verify(logCollectorBatchService).finishCollectBatch(any(), eq(List.of(ok()))); // 배치 건수도 최종 결과로
+    }
+
+    @Test
+    void 계속_실패하면_정한_차수까지만_다시_시도하고_재시도를_켜지_않은_컬렉터는_건드리지_않는다() {
+        PublicDataPipelineRunner r = runner();
+        r.setSleeper(d -> { });
+        lawBatchWithNoRows();
+        when(collectorA.endOfRunRetry()).thenReturn(new EndOfRunRetry(2, Duration.ZERO));
+        when(collectorB.endOfRunRetry()).thenReturn(EndOfRunRetry.NONE);
+        when(collectionAttemptService.run(eq(collectorA), any(), anyString(), eq("exec-1"))).thenReturn(failedWith("API 호출 실패: 502 Bad Gateway"));
+        when(collectionAttemptService.run(eq(collectorB), any(), anyString(), eq("exec-1"))).thenReturn(failedWith("API 호출 실패: 502 Bad Gateway"));
+
+        r.collect(LAW_OP, List.of(collectorA, collectorB), ExecutionType.SCHEDULE, "scheduler:" + LAW_OP);
+
+        verify(collectionAttemptService, times(3)).run(eq(collectorA), any(), anyString(), eq("exec-1")); // 처음 + 2차
+        verify(collectionAttemptService, times(1)).run(eq(collectorB), any(), anyString(), eq("exec-1"));
+    }
+
+    @Test
+    void 응답_내용이_문제인_실패는_다시_해도_같으니_다시_시도하지_않는다() {
+        PublicDataPipelineRunner r = runner();
+        r.setSleeper(d -> { });
+        lawBatchWithNoRows();
+        when(collectorA.endOfRunRetry()).thenReturn(EndOfRunRetry.LAW);
+        when(collectionAttemptService.run(eq(collectorA), any(), anyString(), eq("exec-1")))
+            .thenReturn(failedWith("법령 조회 실패(법령명=없는법): 일치하는 법령이 없습니다."));
+
+        r.collect(LAW_OP, List.of(collectorA), ExecutionType.SCHEDULE, "scheduler:" + LAW_OP);
+
+        verify(collectionAttemptService, times(1)).run(eq(collectorA), any(), anyString(), eq("exec-1"));
+    }
 
     @Test
     void 수집은_컬렉터_전부에_같은_runId와_execId를_넘기고_넘길_행이_있으면_배치를_열어둔다() {

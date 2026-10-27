@@ -6,6 +6,7 @@ import egovframework.external.logcollector.DataTypeClassifier;
 import egovframework.external.logcollector.LogCollectorBatchService;
 import egovframework.external.logcollector.LogCollectorStatus;
 import egovframework.external.model.AttemptStatus;
+import egovframework.external.publicdata.collector.EndOfRunRetry;
 import egovframework.external.model.CleanseResult;
 import egovframework.external.model.CollectResult;
 import egovframework.external.model.ExecutionType;
@@ -68,6 +69,17 @@ public class PublicDataPipelineRunner {
 
     /** 열려 있는 배치의 진행 상태, collectRunId별. */
     private final Map<String, RunState> openRuns = new ConcurrentHashMap<>();
+
+    /** 일시 오류 재시도 전 대기. 테스트가 실제로 3분을 기다리지 않게 바꿔 끼운다. */
+    interface Sleeper {
+        void sleep(Duration duration) throws InterruptedException;
+    }
+
+    private Sleeper sleeper = duration -> Thread.sleep(duration.toMillis());
+
+    void setSleeper(Sleeper sleeper) {
+        this.sleeper = sleeper;
+    }
 
     static final class RunState {
         final String execId;
@@ -140,6 +152,7 @@ public class PublicDataPipelineRunner {
         for (PublicDataCollector collector : collectors) {
             results.add(collectionAttemptService.run(collector, executionType, runId, execId));
         }
+        retryTransientFailures(collectors, results, executionType, runId, execId);
 
         if (!handle.active()) {
             return results;
@@ -154,6 +167,44 @@ public class PublicDataPipelineRunner {
         state.worst = collectStatus(results);
         openRuns.put(runId, state);
         return results;
+    }
+
+    /**
+     * 대상 전체를 다 돈 뒤, 다시 해 볼 만한 실패만 기다렸다가 다시 시도한다({@link PublicDataCollector#endOfRunRetry()}).
+     * 결과는 마지막 시도로 바꿔 둔다 - 로그 컬렉터 배치 건수와 정제 대상이 최종 상태를 따르도록(다시 성공한 행도 같은 runId).
+     */
+    private void retryTransientFailures(List<PublicDataCollector> collectors, List<CollectResult> results,
+            ExecutionType executionType, String runId, String execId) {
+        for (int pass = 1; ; pass++) {
+            List<Integer> targets = new ArrayList<>();
+            Duration delay = Duration.ZERO;
+            for (int i = 0; i < collectors.size(); i++) {
+                EndOfRunRetry retry = collectors.get(i).endOfRunRetry();
+                CollectResult result = results.get(i);
+                if (retry != null && pass <= retry.passes() && result.status() == AttemptStatus.FAILED
+                        && EndOfRunRetry.isTransient(result.failureLog())) {
+                    targets.add(i);
+                    delay = retry.delay().compareTo(delay) > 0 ? retry.delay() : delay;
+                }
+            }
+            if (targets.isEmpty()) {
+                return;
+            }
+            logger.info("[COLLECT] 일시 오류로 실패한 {}건을 {}초 뒤 다시 시도({}차) runId={}", targets.size(), delay.toSeconds(), pass, runId);
+            try {
+                sleeper.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            int recovered = 0;
+            for (int i : targets) {
+                CollectResult again = collectionAttemptService.run(collectors.get(i), executionType, runId, execId);
+                results.set(i, again);
+                recovered += again.status() == AttemptStatus.SUCCESS ? 1 : 0;
+            }
+            logger.info("[COLLECT] 다시 시도 {}차 결과 - {}건 중 {}건 회복 runId={}", pass, targets.size(), recovered, runId);
+        }
     }
 
     /** 잠금을 쥔 run 하나를 정제 → (적재가 켜져 있으면) 적재까지. 로그 컬렉터가 꺼져 있어도 데이터는 진행시킨다. */

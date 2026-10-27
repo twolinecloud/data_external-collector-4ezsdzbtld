@@ -62,4 +62,12 @@ public interface PublicDataCollector {
     default LocalDateTime stagingExpiresAt(LocalDate collectedOn) {
         return null;
     }
+
+    /**
+     * 수집 실행 한 번이 대상 전체를 다 돈 뒤 일시 오류로 실패한 것을 다시 시도할지({@link EndOfRunRetry}). 기본은 재시도 없음 -
+     * 10분·1시간 주기 소스는 다음 주기가 곧 재시도라서다. 하루 한 번인 법령 수집만 켠다.
+     */
+    default EndOfRunRetry endOfRunRetry() {
+        return EndOfRunRetry.NONE;
+    }
 }

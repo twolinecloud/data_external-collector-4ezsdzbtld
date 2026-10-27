@@ -54,6 +54,11 @@ public class MolegCriminalLawCollector implements PublicDataCollector {
     }
 
     @Override
+    public EndOfRunRetry endOfRunRetry() {
+        return EndOfRunRetry.LAW;
+    }
+
+    @Override
     public String apiName() {
         return "법령 본문조회 (" + law.lawName() + ")";
     }

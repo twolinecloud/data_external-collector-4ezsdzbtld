@@ -50,6 +50,11 @@ public class MolegAdminRuleCollector implements PublicDataCollector {
     }
 
     @Override
+    public EndOfRunRetry endOfRunRetry() {
+        return EndOfRunRetry.LAW;
+    }
+
+    @Override
     public String apiName() {
         return "행정규칙 본문조회 (" + rule.lawName() + ")";
     }
