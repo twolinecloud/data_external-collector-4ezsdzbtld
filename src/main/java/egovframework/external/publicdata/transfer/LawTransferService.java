@@ -90,8 +90,8 @@ public class LawTransferService {
     /**
      * 그 수집 실행의 정제된 행을 전송한다.
      *
-     * @return 대상 = 이번 실행의 법령 문서 전체, 성공 = 이번에 보낸 것 + 이미 최신 상태로 보낸 것(변경 없음),
-     *         실패 = 이번에 보내지 못한 것. 변경 없음도 "처리됨"으로 세야 대시보드의 처리·미처리(수집 - 처리)가 맞는다.
+     * @return 대상 = 이번에 실제로 보내야 하는 문서(새로 생겼거나 바뀐 것), 성공 = 그중 보낸 것, 실패 = 보내지 못한 것.
+     *         이미 최신 상태로 보낸 문서(변경 없음)는 대상에 넣지 않는다 - 단계 건수는 실제로 처리할 대상 기준이다.
      */
     public SendResult transfer(String collectRunId) {
         if (!enabled) {
@@ -123,7 +123,7 @@ public class LawTransferService {
         }
         logger.info("[SEND] 법령 전송 끝 runId={} 대상={} 성공={} 실패={} 변경없음={} (기록 {}건)",
             collectRunId, tally.total, tally.success, tally.fail, tally.unchanged, ledger.size());
-        return new SendResult(tally.total + tally.unchanged, tally.success + tally.unchanged, tally.fail);
+        return new SendResult(tally.total, tally.success, tally.fail);
     }
 
     private String run(List<RawStagingDto> rows, Tally tally) {
