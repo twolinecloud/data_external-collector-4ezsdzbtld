@@ -44,6 +44,8 @@ public class LawTransferService {
 
     private static final Logger logger = LogManager.getLogger(LawTransferService.class);
     private static final int MAX_ROWS = 5_000;
+    /** 로그 한 줄에 이름을 나열하는 문서 수 상한 */
+    private static final int MAX_NAMES_IN_LOG = 20;
 
     private final RawStagingStore store;
     private final LawFileFetcher fetcher;
@@ -85,7 +87,12 @@ public class LawTransferService {
         return enabled;
     }
 
-    /** 그 수집 실행의 정제된 행을 전송한다. @return 보내야 했던(변경된) 문서 기준 대상/성공/실패 */
+    /**
+     * 그 수집 실행의 정제된 행을 전송한다.
+     *
+     * @return 대상 = 이번 실행의 법령 문서 전체, 성공 = 이번에 보낸 것 + 이미 최신 상태로 보낸 것(변경 없음),
+     *         실패 = 이번에 보내지 못한 것. 변경 없음도 "처리됨"으로 세야 대시보드의 처리·미처리(수집 - 처리)가 맞는다.
+     */
     public SendResult transfer(String collectRunId) {
         if (!enabled) {
             return new SendResult(0, 0, 0);
@@ -101,6 +108,14 @@ public class LawTransferService {
         } catch (RuntimeException e) {
             logger.error("[SEND] 법령 전송 중 예외 runId={}", collectRunId, e);
             outcome = "전송 실패: " + e.getMessage();
+            // 예외로 중단되면 성공도 실패도 세지 못한 문서가 남는다 - 실패로 세지 않으면 로그 컬렉터에 SUCCESS 로 남는다.
+            int unaccounted = tally.total - tally.success - tally.fail;
+            if (unaccounted > 0) {
+                tally.fail += unaccounted;
+            } else if (tally.total == 0) {
+                tally.total = 1; // 대상 수를 알기 전에 중단됐다 - 건수는 모르지만 실패 상태는 남긴다
+                tally.fail = 1;
+            }
         } finally {
             for (RawStagingDto row : rows) {
                 store.markLoadSkipped(row.getId(), outcome);
@@ -108,7 +123,7 @@ public class LawTransferService {
         }
         logger.info("[SEND] 법령 전송 끝 runId={} 대상={} 성공={} 실패={} 변경없음={} (기록 {}건)",
             collectRunId, tally.total, tally.success, tally.fail, tally.unchanged, ledger.size());
-        return new SendResult(tally.total, tally.success, tally.fail);
+        return new SendResult(tally.total + tally.unchanged, tally.success + tally.unchanged, tally.fail);
     }
 
     private String run(List<RawStagingDto> rows, Tally tally) {
@@ -135,6 +150,7 @@ public class LawTransferService {
         if (changed.isEmpty()) {
             return "변경 없음";
         }
+        logger.info("[SEND] 전송 대상 {}건: {}", changed.size(), names(changed));
 
         try {
             ingest.ping();
@@ -194,8 +210,8 @@ public class LawTransferService {
             ledger.save();
             tally.success += part.documents().size();
         } catch (IOException e) {
-            logger.error("[SEND] ZIP 전송 실패 part={} 문서 {}건 - 기록하지 않으므로 다음 수집에서 다시 시도: {}",
-                part.index(), part.documents().size(), e.getMessage());
+            logger.error("[SEND] ZIP 전송 실패 part={} 문서 {}건({}) - 기록하지 않으므로 다음 수집에서 다시 시도: {}",
+                part.index(), part.documents().size(), names(part.documents()), e.getMessage());
             tally.fail += part.documents().size();
         } finally {
             deleteQuietly(part.file());
@@ -286,6 +302,14 @@ public class LawTransferService {
     }
 
     // ── 보조 ────────────────────────────────────────────
+
+    /** 로그용 문서 이름 목록 - 처음 일부만 보여 준다(전체 전송 때 수백 건이 한 줄에 쏟아지지 않게). */
+    private static String names(List<LawDocument> docs) {
+        int shown = Math.min(docs.size(), MAX_NAMES_IN_LOG);
+        String head = docs.stream().limit(shown).map(d -> d.name() + "(" + d.key() + ")")
+            .collect(java.util.stream.Collectors.joining(", "));
+        return docs.size() > shown ? head + " 외 " + (docs.size() - shown) + "건" : head;
+    }
 
     /** 본문 JSON의 sha256 - 법령이 개정되면 바뀐다. */
     static String fingerprint(LawDocument doc) {

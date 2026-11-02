@@ -135,7 +135,8 @@ class LawTransferServiceTest {
         assertThat(again).isEqualTo(new SendResult(0, 0, 0));
 
         cleansed(law("1", "형법", "법률", ""));
-        assertThat(service().transfer(RUN)).isEqualTo(new SendResult(0, 0, 0)); // 변경 없음
+        // 변경 없음 - 보내지는 않지만 이미 최신 상태로 전달돼 있으므로 대상 1건 중 1건 성공으로 센다
+        assertThat(service().transfer(RUN)).isEqualTo(new SendResult(1, 1, 0));
         assertThat(ingest.uploads).hasSize(1);
 
         cleansed(law("1", "형법", "법률", "").replace("20260201", "20270101")); // 개정
@@ -311,6 +312,7 @@ class LawTransferServiceTest {
     }
 
     class FakeIngest implements LawIngestPort {
+        boolean crash;
         final List<Uploaded> uploads = new ArrayList<>();
         final List<Integer> failUploadNumbers = new ArrayList<>();
         boolean pingFails;
@@ -328,6 +330,9 @@ class LawTransferServiceTest {
         @Override
         public Receipt upload(ZipPart part) throws IngestException {
             uploadCalls++;
+            if (crash) {
+                throw new IllegalStateException("boom");
+            }
             if (failUploadNumbers.contains(uploadCalls)) {
                 throw new IngestException("업로드 실패");
             }
@@ -343,5 +348,46 @@ class LawTransferServiceTest {
     }
 
     record Uploaded(Path file, List<String> entries, String manifest) {
+    }
+
+    // ── 로그 컬렉터에 남는 건수 ────────────────────────────
+
+    @Test
+    void 변경_없는_문서도_대상과_성공에_센다_일부만_바뀌어도_전체가_대상이다() {
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed(law("2", "민법", "법률", ""));
+        assertThat(service().transfer(RUN)).isEqualTo(new SendResult(2, 2, 0)); // 첫 전송
+
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed(law("2", "민법", "법률", "").replace("20260201", "20270101")); // 민법만 개정
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(2, 2, 0)); // 대상 2, 성공 2(이번에 보낸 1 + 변경 없음 1)
+        assertThat(ingest.uploads).hasSize(2);
+    }
+
+    @Test
+    void 변경_없는_문서가_있어도_실패한_문서만_실패로_센다() {
+        cleansed(law("1", "형법", "법률", ""));
+        service().transfer(RUN);
+
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed(law("2", "민법", "법률", ""));
+        ingest.pingFails = true;
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(2, 1, 1)); // 형법은 이미 보냄, 민법만 실패
+    }
+
+    @Test
+    void 전송_중_예상_밖_예외가_나면_센_적_없는_문서를_실패로_센다() {
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed(rule("9", "지침", ""));
+        ingest.crash = true;
+
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(2, 0, 2)); // 예외로 SUCCESS 처럼 남지 않는다
+        assertThat(ledger.size()).isZero();
     }
 }
