@@ -363,6 +363,21 @@ class PublicDataPipelineRunnerTest {
     }
 
     @Test
+    void 법령_수집에_실패가_있으면_정제가_전부_성공해도_배치_대상과_실패에_수집_실패가_더해진다() {
+        PublicDataPipelineRunner r = runner();
+        String runId = openRun(r, LAW_OP, "exec-law", ok(), failed()); // 수집 2개 중 1개 실패
+        when(cleanseService.pendingRunIds()).thenReturn(List.of(runId));
+        when(cleanseService.peekRun(runId)).thenReturn(Optional.of(row(runId, LAW_OP, "exec-law")));
+        when(logCollectorBatchService.continueBatchWithCleanseStep("exec-law")).thenReturn(Optional.of(handle("exec-law", "exec-law02")));
+        when(cleanseService.cleanseRun(runId)).thenReturn(new CleanseResult(1, 1, 0));
+
+        r.cleanse(ExecutionType.SCHEDULE, "scheduler:cleanse");
+
+        // 성공률 = 성공 1 ÷ 대상 2 = 50% (예전엔 1÷1 = 100%)
+        verify(logCollectorBatchService).closeBatch(eq("exec-law"), any(), eq(LogCollectorStatus.PARTIAL), eq(2), eq(1), eq(1));
+    }
+
+    @Test
     void 법령_run은_정제에서_닫는다() {
         PublicDataPipelineRunner r = runner();
         String runId = openRun(r, LAW_OP, "exec-law", ok());
@@ -509,7 +524,7 @@ class PublicDataPipelineRunnerTest {
         r.load(ExecutionType.SCHEDULE, "scheduler:load");
 
         verify(logCollectorBatchService).finishLoadStepKeepBatchOpen(h, new LoadResult(58, 58, 0));
-        verify(logCollectorBatchService).closeBatch(eq("exec-1"), any(), eq(LogCollectorStatus.PARTIAL), eq(58), eq(58), eq(0));
+        verify(logCollectorBatchService).closeBatch(eq("exec-1"), any(), eq(LogCollectorStatus.PARTIAL), eq(59), eq(58), eq(1));
         assertThat(r.openRunCount()).isZero();
     }
 
