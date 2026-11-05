@@ -89,6 +89,8 @@ public class PublicDataPipelineRunner {
         int loadTarget;
         /** 첫 시도 + 재시도로 결국 적재된 건수. */
         int loadSuccess;
+        /** 수집 단계에서 끝내 실패한 시도 수 - 뒤 단계는 수집에 성공한 것만 받아서 배치 건수에 따로 더해 준다. */
+        int collectFail;
 
         RunState(String execId, LocalDateTime startedAt) {
             this.execId = execId;
@@ -165,6 +167,7 @@ public class PublicDataPipelineRunner {
         logCollectorBatchService.finishCollectStepKeepBatchOpen(handle, results);
         RunState state = new RunState(execId, handle.startedAt());
         state.worst = collectStatus(results);
+        state.collectFail = (int) results.stream().filter(r -> r.status() != AttemptStatus.SUCCESS).count();
         openRuns.put(runId, state);
         return results;
     }
@@ -411,8 +414,13 @@ public class PublicDataPipelineRunner {
         return openRuns.computeIfAbsent(runId, id -> new RunState(handle.execId(), handle.startedAt()));
     }
 
+    /**
+     * 배치를 닫는다. 넘어온 건수는 마지막 단계 기준이라 수집에서 실패한 것이 빠져 있다 - 그대로 보내면 부분 성공인데
+     * 성공률이 100%로 나오므로, 수집 실패를 대상과 실패에 더한다(성공은 그대로).
+     */
     private void closeRun(String runId, RunState state, int target, int success, int fail) {
-        logCollectorBatchService.closeBatch(state.execId, state.startedAt, state.worst, target, success, fail);
+        logCollectorBatchService.closeBatch(state.execId, state.startedAt, state.worst,
+            target + state.collectFail, success, fail + state.collectFail);
         openRuns.remove(runId);
     }
 
