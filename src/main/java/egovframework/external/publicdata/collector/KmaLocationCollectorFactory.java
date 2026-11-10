@@ -3,6 +3,7 @@ package egovframework.external.publicdata.collector;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -49,6 +50,20 @@ public class KmaLocationCollectorFactory {
     public List<PublicDataCollector> ultraSrtFcstCollectors() {
         return facilityLocationLoader.all().stream()
             .<PublicDataCollector>map(loc -> new KmaUltraSrtFcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc))
+            .toList();
+    }
+
+    /** {@code requestedAt}에 호출한 것으로 기준시각을 정하는 초단기실황 컬렉터 - 비어 버린 지난 시각 보충용. */
+    public List<PublicDataCollector> ultraSrtNcstCollectorsAt(LocalDateTime requestedAt) {
+        return facilityLocationLoader.all().stream()
+            .<PublicDataCollector>map(loc -> new KmaUltraSrtNcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc, requestedAt))
+            .toList();
+    }
+
+    /** {@code requestedAt}에 호출한 것으로 기준시각을 정하는 초단기예보 컬렉터 - 비어 버린 지난 시각 보충용. */
+    public List<PublicDataCollector> ultraSrtFcstCollectorsAt(LocalDateTime requestedAt) {
+        return facilityLocationLoader.all().stream()
+            .<PublicDataCollector>map(loc -> new KmaUltraSrtFcstCollector(apiClient, villageForecastEndpoint, villageForecastServiceKey, loc, requestedAt))
             .toList();
     }
 
