@@ -21,6 +21,15 @@ class EndOfRunRetryTest {
     }
 
     @Test
+    void 기상청_데이터_없음_재시도는_5분_간격_6회이고_다음_정시_수집과_겹치지_않는다() {
+        assertThat(EndOfRunRetry.KMA_NODATA.passes()).isEqualTo(6);
+        assertThat(EndOfRunRetry.KMA_NODATA.delay()).isEqualTo(java.time.Duration.ofMinutes(5));
+        // 마지막 재시도 대기까지 30분 - 실황(:12)·예보(:47)가 한 시간 주기라 다음 주기 전에 끝난다.
+        assertThat(EndOfRunRetry.KMA_NODATA.delay().multipliedBy(EndOfRunRetry.KMA_NODATA.passes()))
+            .isLessThan(java.time.Duration.ofMinutes(45));
+    }
+
+    @Test
     void 초단기_수집기는_데이터_없음을_끝에서_다시_시도한다() {
         FacilityLocationLoader loader = new FacilityLocationLoader(new CsvFacilityMasterSource(new FacilityMasterCsvLoader()));
         KmaLocationCollectorFactory factory = new KmaLocationCollectorFactory(
