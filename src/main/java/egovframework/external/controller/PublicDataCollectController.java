@@ -5,6 +5,7 @@ import egovframework.external.publicdata.collector.PublicDataCollector;
 import egovframework.external.publicdata.collector.PublicDataCollectorRegistry;
 import egovframework.external.model.ExecutionType;
 import egovframework.external.response.Response;
+import egovframework.external.service.KmaBackfillService;
 import egovframework.external.service.PublicDataCollectionAttemptService;
 import egovframework.external.service.PublicDataPipelineRunner;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +36,7 @@ public class PublicDataCollectController {
 
     private final PublicDataCollectorRegistry collectorRegistry;
     private final PublicDataPipelineRunner pipelineRunner;
+    private final KmaBackfillService backfillService;
 
     /**
      * {@code GET /public-data/collect} - 등록된 전체 컬렉터 목록 조회.
@@ -96,5 +98,40 @@ public class PublicDataCollectController {
                 "triggeredAt", LocalDateTime.now()
             ));
         };
+    }
+
+    /**
+     * {@code POST /public-data/collect/backfill/{operationKey}?from=2026-11-10T06:00&to=2026-11-10T10:00} - 기상청이
+     * "데이터 없음"을 돌려줘 비어 버린 초단기실황/초단기예보의 지난 기준시각을 다시 수집한다.
+     *
+     * <p>{@code operationKey}는 {@code kma-village-forecast-ultra-srt-ncst} 또는
+     * {@code kma-village-forecast-ultra-srt-fcst}. {@code from}~{@code to}는 기준시각의 시(포함)이고 분 이하는 무시한다
+     * (초단기예보는 각 시의 30분 발표분). 한 번에 최대 24시간, 아직 제공 전인 시각은 400. 접수 후 백그라운드에서 한 시각씩
+     * 전 지역(59개소)을 수집·정제·적재하며, 이미 있는 시각은 같은 키로 덮어써서 중복되지 않는다. 이미 보충이 돌고 있으면 409.</p>
+     */
+    @AdminCallable
+    @PostMapping("/backfill/{operationKey}")
+    public Callable<Response<Object>> backfill(@PathVariable String operationKey,
+            @RequestParam String from, @RequestParam String to,
+            @RequestParam(required = false, defaultValue = "manual-api:backfill") String triggerBy) {
+        return () -> {
+            KmaBackfillService.Accepted accepted = backfillService.start(operationKey,
+                parseDateTime(from), parseDateTime(to), triggerBy);
+            return Response.of(Map.of(
+                "operationKey", accepted.operationKey(),
+                "baseTimes", accepted.baseTimes().stream().map(LocalDateTime::toString).toList(),
+                "acceptedAt", LocalDateTime.now()
+            ));
+        };
+    }
+
+    private static LocalDateTime parseDateTime(String value) {
+        try {
+            return LocalDateTime.parse(value);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new egovframework.external.exception.InvalidParameterException(
+                org.apache.logging.log4j.LogManager.getLogger(PublicDataCollectController.class),
+                "시각 형식이 올바르지 않습니다(예: 2026-11-10T06:00): " + value);
+        }
     }
 }

@@ -24,12 +24,24 @@ public class KmaUltraSrtNcstCollector implements PublicDataCollector {
     private final String endpoint;
     private final String serviceKey;
     private final Location location;
+    /** 이 시각에 호출한 것으로 보고 기준시각을 정한다. null이면 지금 - 비어 버린 지난 기준시각을 채울 때만 값을 준다. */
+    private final LocalDateTime requestedAt;
 
     public KmaUltraSrtNcstCollector(KmaApiClient apiClient, String endpoint, String serviceKey, Location location) {
+        this(apiClient, endpoint, serviceKey, location, null);
+    }
+
+    public KmaUltraSrtNcstCollector(KmaApiClient apiClient, String endpoint, String serviceKey, Location location, LocalDateTime requestedAt) {
         this.apiClient = apiClient;
         this.endpoint = endpoint;
         this.serviceKey = serviceKey;
         this.location = location;
+        this.requestedAt = requestedAt;
+    }
+
+    @Override
+    public EndOfRunRetry endOfRunRetry() {
+        return EndOfRunRetry.KMA_NODATA;
     }
 
     @Override
@@ -61,7 +73,7 @@ public class KmaUltraSrtNcstCollector implements PublicDataCollector {
     public List<String> collect() throws CollectException {
         // Main.java의 JVM 기본 타임존이 Asia/Seoul(KST)라 now()가 곧 한국 시각 (2026-08-27).
         KmaBaseTimeCalculator.BaseTime baseTime =
-            KmaBaseTimeCalculator.ultraSrtNcst(LocalDateTime.now());
+            KmaBaseTimeCalculator.ultraSrtNcst(requestedAt != null ? requestedAt : LocalDateTime.now());
 
         Map<String, String> params = new LinkedHashMap<>();
         params.put("numOfRows", "100");
