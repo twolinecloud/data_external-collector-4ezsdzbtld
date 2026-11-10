@@ -23,9 +23,10 @@ public record EndOfRunRetry(int passes, Duration delay) {
     /**
      * 기상청 초단기실황·초단기예보. 2026-11-10 06시 이후 호출 시점(매시 :12 / :47)에 기상청이 "데이터 없음(resultCode=03)"을
      * 59개소 전부에 돌려줘 몇 시간치가 비었다 - 같은 요청이 조금 뒤엔 정상 응답이었다. 다음 주기가 곧 재시도지만 그 주기는
-     * 다른 기준시각을 받아 이전 시각이 영영 비므로, 같은 기준시각을 몇 분 뒤 다시 부른다.
+     * 다른 기준시각을 받아 이전 시각이 영영 비므로, 같은 기준시각을 몇 분 뒤 다시 부른다. 11-11 04시 기준분은 9분(3분×3회)을
+     * 재시도해도 안 나왔다가 4시간 뒤에야 조회돼서 5분 간격 6회(약 30분)로 늘렸다 - 다음 정시 수집과 겹치지 않는 한도다.
      */
-    public static final EndOfRunRetry KMA_NODATA = new EndOfRunRetry(3, Duration.ofMinutes(3));
+    public static final EndOfRunRetry KMA_NODATA = new EndOfRunRetry(6, Duration.ofMinutes(5));
 
     /**
      * 다시 해 볼 만한 실패인가 - 통신·서버 오류("API 호출 실패: 404/502/I/O error ...")와 수집 타임아웃, 기상청의 "데이터 없음"
