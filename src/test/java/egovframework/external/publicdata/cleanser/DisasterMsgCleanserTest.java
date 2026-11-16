@@ -175,7 +175,27 @@ class DisasterMsgCleanserTest {
 
         assertThat(probe.knownFields())
             .containsExactlyInAnyOrder("SN", "MSG_CN", "RCPTN_RGN_NM", "CRT_DT", "REG_YMD",
-                "EMRG_STEP_NM", "DST_SE_NM", "MDFCN_YMD");
+                "EMRG_STEP_NM", "DST_SE_NM", "MDFCN_YMD",
+                "EMRG_STEP_ID", "DST_SE_ID", "RCPTN_RGN_ID");
+        // 코드 필드는 API가 나중에 붙인 선택 필드라 필수 목록엔 없어야 함(없어도 누락 경고 안 남)
+        assertThat(probe.requiredFields())
+            .doesNotContain("EMRG_STEP_ID", "DST_SE_ID", "RCPTN_RGN_ID");
+    }
+
+    @Test
+    void 코드_필드는_정제_결과에_통과되고_없으면_null이다() {
+        String withIds = "[{\"SN\":1,\"MSG_CN\":\"m\",\"RCPTN_RGN_NM\":\"경상남도 통영시 \","
+            + "\"CRT_DT\":\"2026/08/18 02:00:10\",\"EMRG_STEP_NM\":\"안전안내\",\"DST_SE_NM\":\"호우\","
+            + "\"EMRG_STEP_ID\":\"4372\",\"DST_SE_ID\":\"3\",\"RCPTN_RGN_ID\":\"116,118\"}]";
+
+        JSONObject row = new JSONArray(cleanser().cleanse(withIds)).getJSONObject(0);
+        assertThat(row.getString("emrgStepId")).isEqualTo("4372");
+        assertThat(row.getString("dstSeId")).isEqualTo("3");
+        assertThat(row.getString("rcptnRgnIdRaw")).isEqualTo("116,118");
+
+        String withoutIds = withIds.replaceAll(",\"EMRG_STEP_ID.*?\"RCPTN_RGN_ID\":\"116,118\"", "");
+        JSONObject legacy = new JSONArray(cleanser().cleanse(withoutIds)).getJSONObject(0);
+        assertThat(legacy.isNull("emrgStepId")).isTrue();
     }
 
     private static List<String> toFacilityIds(JSONArray result) {

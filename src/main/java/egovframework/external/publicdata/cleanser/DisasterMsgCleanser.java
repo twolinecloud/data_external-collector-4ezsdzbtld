@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,17 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
     private static final Set<String> RAW_ITEM_FIELDS = Set.of(
         "SN", "MSG_CN", "RCPTN_RGN_NM", "CRT_DT", "REG_YMD", "EMRG_STEP_NM", "DST_SE_NM", "MDFCN_YMD");
 
+    /**
+     * 2026-10-02 실 서비스키로 최근 4일 74건에서 새로 관찰된 코드 필드 3종(각 _NM의 짝, 문자열).
+     * 예: EMRG_STEP_ID "4372"=안전안내, DST_SE_ID "15"=화재, RCPTN_RGN_ID "116,118"(다중지역은
+     * 콤마, _NM과 순서 일치). 지역 코드는 법정동/행정동 코드가 아닌 플랫폼 자체 번호라 매칭엔
+     * 쓰지 않고 정제 결과로 통과만 시킨다. API가 나중에 붙인 필드라 필수가 아니다(없어도 오류 아님).
+     */
+    private static final Set<String> RAW_ITEM_OPTIONAL_FIELDS = Set.of(
+        "EMRG_STEP_ID", "DST_SE_ID", "RCPTN_RGN_ID");
+
+    private static final Set<String> RAW_ITEM_KNOWN_FIELDS = unionOf(RAW_ITEM_FIELDS, RAW_ITEM_OPTIONAL_FIELDS);
+
     private static final DateTimeFormatter SOURCE_DATETIME = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     private final FacilityRegionLoader facilityRegionLoader;
@@ -55,7 +67,7 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
 
     @Override
     public List<StructureProbe> structureProbes() {
-        return List.of(new StructureProbe("raw-item", RAW_ITEM_FIELDS, RAW_ITEM_FIELDS, StructureProbeSupport::unionKeys));
+        return List.of(new StructureProbe("raw-item", RAW_ITEM_KNOWN_FIELDS, RAW_ITEM_FIELDS, StructureProbeSupport::unionKeys));
     }
 
     @Override
@@ -115,6 +127,10 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
             row.put("emrgStepNm", msg.getString("EMRG_STEP_NM"));
             row.put("dstSeNm", msg.getString("DST_SE_NM"));
             row.put("rcptnRgnNmRaw", rcptnRgnNmRaw);
+            // 코드 필드는 admin-db 컬럼이 아직 없어 적재되진 않지만, 정제 JSON엔 남겨둔다
+            row.put("emrgStepId", msg.has("EMRG_STEP_ID") ? msg.get("EMRG_STEP_ID") : JSONObject.NULL);
+            row.put("dstSeId", msg.has("DST_SE_ID") ? msg.get("DST_SE_ID") : JSONObject.NULL);
+            row.put("rcptnRgnIdRaw", msg.has("RCPTN_RGN_ID") ? msg.get("RCPTN_RGN_ID") : JSONObject.NULL);
             // REG_YMD/MDFCN_YMD는 이름과 달리 실측값이 날짜(YMD)가 아니라 초 이하 단위까지 포함한
             // 전체 타임스탬프 문자열이었다(예: "2026/08/18 02:01:05.000000000") - 형식을 함부로
             // 재단하지 않고 원문 그대로 통과시킨다. cleanse-db-schema-spec.md §4.1의
@@ -123,6 +139,12 @@ public class DisasterMsgCleanser implements PublicDataCleanser {
             row.put("mdfcnDe", msg.has("MDFCN_YMD") ? msg.get("MDFCN_YMD") : JSONObject.NULL);
             result.put(row);
         }
+    }
+
+    private static Set<String> unionOf(Set<String> a, Set<String> b) {
+        Set<String> all = new HashSet<>(a);
+        all.addAll(b);
+        return Set.copyOf(all);
     }
 
     private void requireField(JSONObject msg, String field) {
