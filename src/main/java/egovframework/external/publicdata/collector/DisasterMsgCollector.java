@@ -1,8 +1,12 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import egovframework.external.publicdata.source.DirectExternalApiAdapter;
+import egovframework.external.publicdata.source.ExternalApiCall;
+import egovframework.external.publicdata.source.ExternalApiPort;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -12,7 +16,9 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 재난안전데이터공유플랫폼(safetydata.go.kr) - 행정안전부_긴급재난문자 목록조회
@@ -51,18 +57,24 @@ public class DisasterMsgCollector implements PublicDataCollector {
     /** 무한루프 방지 상한 ({@link KmaApiClient}와 동일한 방어). */
     private static final int MAX_PAGES = 10;
 
-    private final RestTemplate restTemplate;
+    private final ExternalApiPort api;
     private final String endpoint;
     private final String serviceKey;
 
+    @Autowired
     public DisasterMsgCollector(
-        RestTemplate restTemplate,
+        ExternalApiPort api,
         @Value("${public-data.safetydata.endpoint:https://www.safetydata.go.kr/V2/api/DSSP-IF-00247}") String endpoint,
         @Value("${public-data.safetydata.service-key:}") String serviceKey
     ) {
-        this.restTemplate = restTemplate;
+        this.api = api;
         this.endpoint = endpoint;
         this.serviceKey = serviceKey;
+    }
+
+    /** 직접 연결 어댑터로 구성 - RestTemplate을 mock으로 쓰는 기존 테스트용. */
+    public DisasterMsgCollector(RestTemplate restTemplate, String endpoint, String serviceKey) {
+        this(new DirectExternalApiAdapter(restTemplate), endpoint, serviceKey);
     }
 
     @Override
@@ -120,16 +132,16 @@ public class DisasterMsgCollector implements PublicDataCollector {
     }
 
     private String fetch(String crtDt, int pageNo) {
-        String url = endpoint
-            + "?serviceKey=" + serviceKey
-            + "&returnType=json"
-            + "&crtDt=" + crtDt
-            + "&pageNo=" + pageNo
-            + "&numOfRows=" + ROWS_PER_PAGE;
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("returnType", "json");
+        params.put("crtDt", crtDt);
+        params.put("pageNo", String.valueOf(pageNo));
+        params.put("numOfRows", String.valueOf(ROWS_PER_PAGE));
         try {
-            // serviceKey가 이미 URL-encode된 값일 수 있어 URI.create로 직접 만든다
+            // serviceKey가 이미 URL-encode된 값일 수 있어 어댑터가 URI.create로 직접 만든다
             // (String 오버로드는 URI 템플릿으로 재인코딩해 키를 깨뜨림 - KmaApiClient와 동일한 이유)
-            return restTemplate.getForObject(URI.create(url), String.class);
+            return api.getText(new ExternalApiCall(ExternalApiCall.Channel.DEFAULT, sourceName(), apiName(),
+                endpoint, "serviceKey", serviceKey, params, false));
         } catch (RestClientException | IllegalArgumentException e) {
             throw new CollectException(sourceName(), apiName(), "API 호출 실패: " + e.getMessage(), e);
         }

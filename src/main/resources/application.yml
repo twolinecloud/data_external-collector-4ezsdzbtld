@@ -93,6 +93,15 @@ admin-api:
   read-timeout-ms: 3000
 
 public-data:
+  # 외부 API 호출 경로(직접 연결 / 메타빌드 ESB 경유) 선택 - RoutingExternalApiPort. 기본은 전부 direct.
+  # operation별로 덮어쓰려면 키를 호출 URL 마지막 경로 조각의 영숫자 소문자로 쓴다(ExternalApiCall#operation):
+  #   getultrasrtncst, getultrasrtfcst, getvilagefcst, getwthrwrnlist, getwthrwrnmsg, getuvidxv, getairdiffusionidxv,
+  #   kmasfctm2php, wrnregaws2php, getctprvnrltmmesurednsty, getminudustfrcstdspth(에어코리아), dsspif00247
+  # esb 는 EsbExternalApiPort 구현체가 있어야 하며, 없으면 기동 시 실패한다(ESB 어댑터 추가 전에는 쓰지 않는다).
+  # source:
+  #   mode:
+  #     default: direct
+  #     getultrasrtncst: direct
   # 관리자 서비스의 스케줄 사용 여부를 다시 가져오는 주기(ms). 관리자 서비스의 즉시 반영 호출을 놓쳤을 때
   # 따라잡는 용도라 기본 5분. README.md '관리자 서비스(admin-api) 연동' 참고.
   schedule-sync:

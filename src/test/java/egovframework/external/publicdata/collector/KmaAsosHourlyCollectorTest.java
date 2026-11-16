@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KmaAsosHourlyCollectorTest {
 
     private final KmaAsosHourlyCollector collector =
-        new KmaAsosHourlyCollector(new KmaApiHubClient(null), "https://example.invalid", "test-key");
+        new KmaAsosHourlyCollector(new KmaApiHubClient((org.springframework.web.client.RestTemplate) null), "https://example.invalid", "test-key");
 
     @Test
     void 필드명은_실측_응답의_컬럼_수와_같은_46개다() {

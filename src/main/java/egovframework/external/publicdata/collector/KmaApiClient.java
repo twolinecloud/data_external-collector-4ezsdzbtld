@@ -1,8 +1,12 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import egovframework.external.publicdata.source.DirectExternalApiAdapter;
+import egovframework.external.publicdata.source.ExternalApiCall;
+import egovframework.external.publicdata.source.ExternalApiPort;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -37,10 +41,16 @@ public class KmaApiClient {
     private static final Logger logger = LogManager.getLogger(KmaApiClient.class);
     private static final int MAX_PAGES = 10;
 
-    private final RestTemplate restTemplate;
+    private final ExternalApiPort api;
 
+    @Autowired
+    public KmaApiClient(ExternalApiPort api) {
+        this.api = api;
+    }
+
+    /** 직접 연결 어댑터로 구성 - RestTemplate을 mock으로 쓰는 기존 테스트용. */
     public KmaApiClient(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+        this(new DirectExternalApiAdapter(restTemplate));
     }
 
     public List<String> call(String sourceName, String apiName, String endpoint, String serviceKey,
@@ -87,12 +97,9 @@ public class KmaApiClient {
 
     private String fetch(String sourceName, String apiName, String endpoint, String serviceKey,
             Map<String, String> params) {
-        StringBuilder url = new StringBuilder(endpoint).append('?').append("serviceKey=").append(serviceKey);
-        params.forEach((key, value) -> url.append('&').append(key).append('=').append(value));
-
         try {
-            URI uri = URI.create(url.toString());
-            return restTemplate.getForObject(uri, String.class);
+            return api.getText(new ExternalApiCall(ExternalApiCall.Channel.DEFAULT, sourceName, apiName,
+                    endpoint, "serviceKey", serviceKey, params, false));
         } catch (RestClientException | IllegalArgumentException e) {
             throw new CollectException(sourceName, apiName, "API 호출 실패: " + e.getMessage(), e);
         }

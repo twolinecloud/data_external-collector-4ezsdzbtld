@@ -1,6 +1,9 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import egovframework.external.publicdata.source.DirectExternalApiAdapter;
+import egovframework.external.publicdata.source.ExternalApiCall;
+import egovframework.external.publicdata.source.ExternalApiPort;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -12,8 +15,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,17 +56,26 @@ public class AirKoreaApiClient {
     /** 되풀이하면 성공할 수 있는 실패. 05 = 서비스 연결실패(에어코리아 서버측 일시 장애). */
     private static final String TRANSIENT_REASON_CODE = "05";
 
-    private final RestTemplate restTemplate;
+    private final ExternalApiPort api;
     private final long[] retryBackoffMs;
 
     @Autowired
+    public AirKoreaApiClient(ExternalApiPort api) {
+        this(api, DEFAULT_RETRY_BACKOFF_MS);
+    }
+
+    /** 직접 연결 어댑터로 구성 - RestTemplate을 mock으로 쓰는 기존 테스트용. */
     public AirKoreaApiClient(RestTemplate restTemplate) {
-        this(restTemplate, DEFAULT_RETRY_BACKOFF_MS);
+        this(new DirectExternalApiAdapter(restTemplate), DEFAULT_RETRY_BACKOFF_MS);
     }
 
     /** 대기 시간을 직접 지정하는 생성자 - 테스트에서 실제로 50초를 기다리지 않으려고 씀. */
     AirKoreaApiClient(RestTemplate restTemplate, long[] retryBackoffMs) {
-        this.restTemplate = restTemplate;
+        this(new DirectExternalApiAdapter(restTemplate), retryBackoffMs);
+    }
+
+    AirKoreaApiClient(ExternalApiPort api, long[] retryBackoffMs) {
+        this.api = api;
         this.retryBackoffMs = retryBackoffMs;
     }
 
@@ -133,19 +143,15 @@ public class AirKoreaApiClient {
 
     private String fetch(String sourceName, String apiName, String endpoint, String serviceKey,
             Map<String, String> params) {
-        // serviceKey는 이미 URL-encode된 문자열이라 그대로 붙인다 - 다시 인코딩하면 깨진다
-        // (이중 인코딩 방지, KmaApiClient 주석과 같은 이유).
-        StringBuilder url = new StringBuilder(endpoint).append('?').append("serviceKey=").append(serviceKey);
+        // serviceKey는 이미 URL-encode된 문자열이라 그대로 붙이고(재인코딩 금지), 나머지 파라미터는 인코딩해서
+        // 붙인다 - 이 조립은 DirectExternalApiAdapter가 encodeParams=true로 수행한다.
         // 나머지 파라미터는 반드시 인코딩한다. sidoName="전국"처럼 한글 값이 들어오는데, 원문
         // 그대로 붙이면 API가 400 Bad Request로 거절한다(2026-09-03 운영 첫 수집에서 실측 -
         // 같은 요청도 %EC%A0%84%EA%B5%AD로 보내면 200). 값에 한글을 쓰는 건 이 API가 처음이라
         // 기존 클라이언트에는 없던 문제다.
-        params.forEach((key, value) -> url.append('&').append(key).append('=')
-            .append(URLEncoder.encode(value, StandardCharsets.UTF_8)));
-
         try {
-            URI uri = URI.create(url.toString());
-            return restTemplate.getForObject(uri, String.class);
+            return api.getText(new ExternalApiCall(ExternalApiCall.Channel.DEFAULT, sourceName, apiName,
+                endpoint, "serviceKey", serviceKey, params, true));
         } catch (HttpClientErrorException e) {
             // 4xx는 우리 요청이 잘못된 것이라 되풀이해도 그대로다 - 재시도하면 원인 파악만 늦어진다
             // (2026-09-03 실측: 한글 미인코딩으로 400이 났는데 3회를 되풀이하고 4초를 버렸다).

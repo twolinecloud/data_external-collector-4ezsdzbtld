@@ -1,11 +1,13 @@
 package egovframework.external.publicdata.collector;
 
 import egovframework.external.exception.CollectException;
+import egovframework.external.publicdata.source.DirectExternalApiAdapter;
+import egovframework.external.publicdata.source.ExternalApiCall;
+import egovframework.external.publicdata.source.ExternalApiPort;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
@@ -54,17 +56,26 @@ public class KmaApiHubClient {
 
     private static final Logger logger = LogManager.getLogger(KmaApiHubClient.class);
 
-    private final RestTemplate restTemplate;
+    private final ExternalApiPort api;
     private final long[] retryBackoffMs;
 
     @Autowired
-    public KmaApiHubClient(@Qualifier("kmaApiHubRestTemplate") RestTemplate restTemplate) {
-        this(restTemplate, DEFAULT_RETRY_BACKOFF_MS);
+    public KmaApiHubClient(ExternalApiPort api) {
+        this(api, DEFAULT_RETRY_BACKOFF_MS);
+    }
+
+    /** 직접 연결 어댑터로 구성 - RestTemplate을 mock으로 쓰는 기존 테스트용. */
+    public KmaApiHubClient(RestTemplate restTemplate) {
+        this(new DirectExternalApiAdapter(restTemplate), DEFAULT_RETRY_BACKOFF_MS);
     }
 
     /** 대기 시간을 직접 지정하는 생성자 - 테스트에서 실제로 20초를 기다리지 않으려고 씀. */
     KmaApiHubClient(RestTemplate restTemplate, long[] retryBackoffMs) {
-        this.restTemplate = restTemplate;
+        this(new DirectExternalApiAdapter(restTemplate), retryBackoffMs);
+    }
+
+    KmaApiHubClient(ExternalApiPort api, long[] retryBackoffMs) {
+        this.api = api;
         this.retryBackoffMs = retryBackoffMs;
     }
 
@@ -87,24 +98,20 @@ public class KmaApiHubClient {
 
     private String fetch(String sourceName, String apiName, String endpoint, String authKey,
             Map<String, String> params) {
-        StringBuilder url = new StringBuilder(endpoint).append('?').append("authKey=").append(authKey);
-        params.forEach((key, value) -> url.append('&').append(key).append('=').append(value));
-
-        URI uri;
-        try {
-            uri = URI.create(url.toString());
-        } catch (IllegalArgumentException e) {
-            throw new CollectException(sourceName, apiName, "API 호출 실패: " + e.getMessage(), e);
-        }
+        ExternalApiCall call = new ExternalApiCall(ExternalApiCall.Channel.API_HUB, sourceName, apiName,
+            endpoint, "authKey", authKey, params, false);
 
         int maxAttempts = retryBackoffMs.length + 1;
         for (int attempt = 1; ; attempt++) {
             try {
-                byte[] raw = restTemplate.getForObject(uri, byte[].class);
+                byte[] raw = api.getBytes(call);
                 if (raw == null) {
                     throw new CollectException(sourceName, apiName, "API 호출 실패: 빈 응답");
                 }
                 return new String(raw, RESPONSE_CHARSET);
+            } catch (IllegalArgumentException e) {
+                // URI 형식 오류 - 되풀이해도 같다
+                throw new CollectException(sourceName, apiName, "API 호출 실패: " + e.getMessage(), e);
             } catch (HttpClientErrorException e) {
                 // 4xx(인증키 오류 등)는 되풀이해도 그대로다 - 재시도하면 원인 파악만 늦어진다.
                 throw new CollectException(sourceName, apiName, "API 호출 실패(요청 오류): " + e.getMessage(), e);

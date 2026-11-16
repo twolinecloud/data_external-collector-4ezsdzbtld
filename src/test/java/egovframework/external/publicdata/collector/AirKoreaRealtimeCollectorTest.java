@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AirKoreaRealtimeCollectorTest {
 
     private final AirKoreaRealtimeCollector collector =
-        new AirKoreaRealtimeCollector(new AirKoreaApiClient(null), "https://example.invalid", "test-key");
+        new AirKoreaRealtimeCollector(new AirKoreaApiClient((org.springframework.web.client.RestTemplate) null), "https://example.invalid", "test-key");
 
     @Test
     void 전국을_한_번에_받으므로_시도별_인스턴스가_없다() {

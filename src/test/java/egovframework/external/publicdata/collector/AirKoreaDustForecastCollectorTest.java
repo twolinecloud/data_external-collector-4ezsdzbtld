@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AirKoreaDustForecastCollectorTest {
 
     private final AirKoreaDustForecastCollector collector =
-        new AirKoreaDustForecastCollector(new AirKoreaApiClient(null), "https://example.invalid", "test-key");
+        new AirKoreaDustForecastCollector(new AirKoreaApiClient((org.springframework.web.client.RestTemplate) null), "https://example.invalid", "test-key");
 
     @Test
     void 전국을_한_번에_받으므로_지역별_인스턴스가_없다() {
