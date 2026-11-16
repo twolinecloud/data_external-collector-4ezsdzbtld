@@ -25,13 +25,19 @@ class WarningZoneBeanWiringTest {
 
     @Configuration
     @Import({KmaWeatherWarningListCleanser.class, KmaWarningZoneDirectory.class, KmaWarningStationLoader.class,
-        OpenTopoDataElevationLookup.class})
+        OpenTopoDataElevationLookup.class, egovframework.external.publicdata.source.DirectExternalApiAdapter.class,
+        egovframework.external.publicdata.source.RoutingExternalApiPort.class})
     static class Config {
         @Bean
         FacilityMasterSource facilityMasterSource() {
             FacilityMasterSource source = Mockito.mock(FacilityMasterSource.class);
             Mockito.when(source.current()).thenReturn(List.of());
             return source;
+        }
+
+        @Bean(name = "restTemplate")
+        RestTemplate restTemplate() {
+            return Mockito.mock(RestTemplate.class);
         }
 
         @Bean(name = "kmaApiHubRestTemplate")

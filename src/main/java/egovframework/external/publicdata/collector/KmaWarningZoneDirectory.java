@@ -1,15 +1,14 @@
 package egovframework.external.publicdata.collector;
 
+import egovframework.external.publicdata.source.ExternalApiCall;
+import egovframework.external.publicdata.source.ExternalApiPort;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
-import java.net.URI;
 import java.nio.charset.Charset;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,7 +59,7 @@ public class KmaWarningZoneDirectory {
     record Station(String zoneCode, String zoneName, double lat, double lon, double heightM) {
     }
 
-    private final RestTemplate restTemplate;
+    private final ExternalApiPort api;
     private final String endpoint;
     private final String authKey;
     private final FacilityElevationLookup elevationLookup;
@@ -71,12 +70,12 @@ public class KmaWarningZoneDirectory {
 
     @Autowired
     public KmaWarningZoneDirectory(
-        @Qualifier("kmaApiHubRestTemplate") RestTemplate restTemplate,
+        ExternalApiPort api,
         @Value("${public-data.kma.warning-zone.endpoint:https://apihub.kma.go.kr/api/typ01/url/wrn_reg_aws2.php}") String endpoint,
         @Value("${public-data.kma.asos-hourly.auth-key:}") String authKey,
         FacilityElevationLookup elevationLookup
     ) {
-        this.restTemplate = restTemplate;
+        this.api = api;
         this.endpoint = endpoint;
         this.authKey = authKey;
         this.elevationLookup = elevationLookup == null ? FacilityElevationLookup.NONE : elevationLookup;
@@ -98,12 +97,17 @@ public class KmaWarningZoneDirectory {
     @Scheduled(cron = "${public-data.kma.warning-zone.refresh-cron:0 40 4 * * *}")
     public void refresh() {
         lastAttempt = Instant.now();
-        if (restTemplate == null || endpoint == null || endpoint.isBlank() || authKey == null || authKey.isBlank()) {
+        if (api == null || endpoint == null || endpoint.isBlank() || authKey == null || authKey.isBlank()) {
             logger.warn("[WARN-ZONE] 특보구역 자료 엔드포인트/인증키 없음 - 세분 구역 없이 시군 단위로 매칭함");
             return;
         }
         try {
-            byte[] raw = restTemplate.getForObject(URI.create(endpoint + "?tm=&disp=1&help=0&authKey=" + authKey), byte[].class);
+            Map<String, String> params = new java.util.LinkedHashMap<>();
+            params.put("tm", "");
+            params.put("disp", "1");
+            params.put("help", "0");
+            byte[] raw = api.getBytes(new ExternalApiCall(ExternalApiCall.Channel.API_HUB, "기상청 API허브",
+                "특보구역 관측소 정보조회", endpoint, "authKey", authKey, params, false));
             List<Station> parsed = raw == null ? List.of() : parse(new String(raw, RESPONSE_CHARSET));
             if (parsed.isEmpty()) {
                 logger.warn("[WARN-ZONE] 특보구역 자료가 비어 있음(활용신청/형식 변경 확인 필요) - 이전 자료 유지({}곳)", stations.size());
