@@ -78,4 +78,25 @@ class RoutingExternalApiPortTest {
         assertThrows(IllegalStateException.class,
             () -> new RoutingExternalApiPort(new Tagged("direct"), new Tagged("esb"), Map.of("default", "proxy")));
     }
+
+    @Test
+    void 호출마다_operation_mode_outcome_태그로_메트릭을_남긴다() {
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        ExternalApiPort failing = new ExternalApiPort() {
+            @Override public String getText(ExternalApiCall call) { throw new IllegalStateException("boom"); }
+            @Override public byte[] getBytes(ExternalApiCall call) { return null; }
+        };
+        RoutingExternalApiPort ok = new RoutingExternalApiPort(new Tagged("direct"), null, Map.of(), registry);
+        RoutingExternalApiPort bad = new RoutingExternalApiPort(failing, null, Map.of(), registry);
+
+        ok.getText(call("https://x/getVilageFcst"));
+        assertThrows(IllegalStateException.class, () -> bad.getText(call("https://x/getVilageFcst")));
+        bad.getBytes(call("https://x/getVilageFcst"));
+
+        assertEquals(1L, registry.get("external_api_call").tag("operation", "getvilagefcst")
+            .tag("mode", "direct").tag("outcome", "success").timer().count());
+        assertEquals(1L, registry.get("external_api_call").tag("outcome", "failure").timer().count());
+        assertEquals(1L, registry.get("external_api_call").tag("outcome", "empty").timer().count());
+    }
 }
