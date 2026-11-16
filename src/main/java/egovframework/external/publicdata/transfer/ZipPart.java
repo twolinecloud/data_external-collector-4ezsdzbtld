@@ -9,7 +9,7 @@ import java.util.List;
  * @param jsonCount        본문 JSON 수
  * @param topLevelFolders  최상위 폴더 수(law, admrul)
  * @param documents        이 ZIP에 든 문서 - 전송이 확인되면 이것들을 "보냄"으로 기록한다
- * @param manifestJson     이 ZIP의 manifest - ZIP에는 넣지 않고 업로드 요청의 'manifest' 파일 파트로 보낸다(Xenon 규약)
+ * @param manifestJson     이 ZIP의 manifest - ZIP에는 넣지 않고 업로드 요청의 'manifest' 파일 파트로 보낸다(Genon 규약)
  */
 public record ZipPart(int index, Path file, String sha256, long sizeBytes, int jsonCount,
                       int attachmentCount, int topLevelFolders, List<LawDocument> documents, String manifestJson) {

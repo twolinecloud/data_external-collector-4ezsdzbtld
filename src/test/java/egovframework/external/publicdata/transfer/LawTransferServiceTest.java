@@ -28,6 +28,7 @@ class LawTransferServiceTest {
     private final InMemoryRawStagingStore store = new InMemoryRawStagingStore();
     private final FakeFetcher fetcher = new FakeFetcher();
     private final FakeIngest ingest = new FakeIngest();
+    private final FakeMstLookup mstLookup = new FakeMstLookup();
     private LawTransferLedger ledger;
 
     @TempDir
@@ -39,7 +40,7 @@ class LawTransferServiceTest {
     }
 
     private LawTransferService service(boolean enabled, boolean sendAll, boolean images, long maxZip) {
-        return new LawTransferService(store, fetcher, ingest, ledger, enabled, sendAll, images, maxZip, 2,
+        return new LawTransferService(store, fetcher, ingest, mstLookup, ledger, enabled, sendAll, images, maxZip, 2,
             "hwp,hwpx,pdf,doc,docx,png,jpg,jpeg,gif");
     }
 
@@ -212,6 +213,60 @@ class LawTransferServiceTest {
         assertThat(ledger.isUnchanged("LAW:1", LawTransferService.fingerprint(LawDocumentParser.parse(law("1", "형법", "법률", ANNEX)).get(0)))).isFalse();
     }
 
+    // ── MST ───────────────────────────────────────────────
+
+    @Test
+    void 법령은_검색으로_찾은_MST를_행정규칙은_본문의_일련번호를_manifest에_담는다() {
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed("[{\"AdmRulService\":{\"행정규칙기본정보\":{\"행정규칙ID\":\"9\",\"행정규칙명\":\"지침\","
+            + "\"행정규칙종류\":\"예규\",\"행정규칙일련번호\":\"2100000285778\"}}}]");
+        mstLookup.mstById.put("1", "290605");
+
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(2, 2, 0));
+        assertThat(mstLookup.calls).containsExactly("1"); // 행정규칙은 조회하지 않는다
+        String all = ingest.uploads.get(0).manifest + ingest.uploads.get(1).manifest;
+        assertThat(all).contains("\"mst\": \"290605\"").contains("\"mst\": \"2100000285778\"");
+    }
+
+    @Test
+    void 검색에_없는_법령은_mst_null로_보낸다() {
+        cleansed(law("1", "형법", "법률", ""));
+
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(1, 1, 0));
+        assertThat(ingest.uploads.get(0).manifest).contains("\"mst\": null");
+    }
+
+    @Test
+    void MST_조회가_실패한_법령은_이번_전송에서_빼고_기록하지_않아_다음에_다시_시도한다() {
+        cleansed(law("1", "형법", "법률", ""));
+        cleansed(law("2", "민법", "법률", ""));
+        mstLookup.mstById.put("2", "100");
+        mstLookup.failIds.add("1");
+
+        SendResult result = service().transfer(RUN);
+
+        assertThat(result).isEqualTo(new SendResult(2, 1, 1));
+        assertThat(ingest.uploads.get(0).entries).contains("law/법률/민법/민법.json").noneMatch(e -> e.contains("형법"));
+        assertThat(ledger.isUnchanged("LAW:1", LawTransferService.fingerprint(LawDocumentParser.parse(law("1", "형법", "법률", "")).get(0)))).isFalse();
+    }
+
+    @Test
+    void 이미_보낸_문서는_MST_조회도_하지_않는다() {
+        cleansed(law("1", "형법", "법률", ""));
+        mstLookup.mstById.put("1", "290605");
+        service().transfer(RUN);
+        mstLookup.calls.clear();
+
+        cleansed(law("1", "형법", "법률", ""));
+        service().transfer(RUN);
+
+        assertThat(mstLookup.calls).isEmpty();
+    }
+
     // ── 전송 실패 ─────────────────────────────────────────
 
     @Test
@@ -311,6 +366,22 @@ class LawTransferServiceTest {
         }
     }
 
+    /** 법령ID → MST. 비어 있으면 검색에 없는 것, failIds 는 조회 자체가 실패. */
+    static class FakeMstLookup implements LawMstLookup {
+        final Map<String, String> mstById = new HashMap<>();
+        final List<String> failIds = new ArrayList<>();
+        final List<String> calls = new ArrayList<>();
+
+        @Override
+        public String find(LawDocument doc) throws LookupException {
+            calls.add(doc.lawId());
+            if (failIds.contains(doc.lawId())) {
+                throw new LookupException("검색 실패");
+            }
+            return mstById.get(doc.lawId());
+        }
+    }
+
     class FakeIngest implements LawIngestPort {
         boolean crash;
         final List<Uploaded> uploads = new ArrayList<>();
@@ -338,7 +409,7 @@ class LawTransferServiceTest {
             }
             try (ZipFile zip = new ZipFile(part.file().toFile(), StandardCharsets.UTF_8)) {
                 List<String> names = zip.stream().map(ZipEntry::getName).toList();
-                // manifest 는 ZIP 이 아니라 업로드 요청의 별도 파트로 간다(Xenon 규약)
+                // manifest 는 ZIP 이 아니라 업로드 요청의 별도 파트로 간다(Genon 규약)
                 uploads.add(new Uploaded(part.file(), names, part.manifestJson()));
             } catch (IOException e) {
                 throw new IngestException("읽기 실패", e);

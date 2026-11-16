@@ -64,7 +64,8 @@ public final class LawDocumentParser {
             info.optString("소관부처명", ""),
             item.toString(),
             annexes(root.opt("별표")),
-            attachments(root.opt("첨부파일")));
+            attachments(root.opt("첨부파일")),
+            blankToNull(info.optString("행정규칙일련번호", "")));
     }
 
     private static List<LawDocument.Annex> annexes(Object node) {
@@ -118,6 +119,10 @@ public final class LawDocumentParser {
             return "https://" + trimmed.substring("http://".length());
         }
         return trimmed;
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.strip();
     }
 
     private static String required(JSONObject o, String key) {

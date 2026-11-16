@@ -26,7 +26,7 @@ import java.util.Optional;
  * private-doc/log-collector-api-spec.md §8 참고 - 이 클래스는 그 설계를 코드로 옮긴 것.
  *
  * <p><b>배치 경계(2026-09-29 변경)</b>: 수집 실행 1회 = 배치(execId) 1개이고, 그 수집의 정제·적재가
- * 같은 execId에 CLEANSE·STORE 스텝을 이어붙인다(법령은 적재 단계 없이 정제에서 닫거나, Xenon 전송이 켜져 있으면 SEND 스텝을 붙여 거기서 닫음). 예전(§8)엔
+ * 같은 execId에 CLEANSE·STORE 스텝을 이어붙인다(법령은 적재 단계 없이 정제에서 닫거나, Genon 전송이 켜져 있으면 SEND 스텝을 붙여 거기서 닫음). 예전(§8)엔
  * 정제가 여러 수집 결과를 한꺼번에 처리해서 단계마다 별도 배치를 썼는데, 정제·적재를 수집 실행
  * 단위로 바꾸면서 연결했다 - 흐름 제어는 {@code PublicDataPipelineRunner}. 이어받기에 실패하면
  * 기존처럼 그 단계만의 새 배치({@link #startCleanseBatch}/{@link #startLoadBatch})로 남긴다.</p>
@@ -115,7 +115,7 @@ public class LogCollectorBatchService {
         return start(jobNm, dataTypeCd, executionType, triggerBy, STEP_STORE);
     }
 
-    /** 법령 전송(Xenon) 배치 시작 - {@link #startLoadBatch}와 같은 역할의 SEND 버전(이어붙일 배치가 없을 때만 쓴다). */
+    /** 법령 전송(Genon) 배치 시작 - {@link #startLoadBatch}와 같은 역할의 SEND 버전(이어붙일 배치가 없을 때만 쓴다). */
     public BatchHandle startSendBatch(String dataTypeCd, ExecutionType executionType, String triggerBy) {
         String jobNm = "외부연계 전송" + categoryLabel(dataTypeCd);
         return start(jobNm, dataTypeCd, executionType, triggerBy, STEP_SEND);
@@ -185,7 +185,7 @@ public class LogCollectorBatchService {
     }
 
     /**
-     * 이미 열려있는 배치(execId)에 SEND(법령 Xenon 전송) 스텝만 추가한다 - 법령 전용. cleanse가
+     * 이미 열려있는 배치(execId)에 SEND(법령 Genon 전송) 스텝만 추가한다 - 법령 전용. cleanse가
      * {@link #finishCleanseStepKeepBatchOpen}으로 배치를 열어둔 경우 같은 execId 아래 stepSeq=3으로 이어붙인다.
      */
     public Optional<BatchHandle> continueBatchWithSendStep(String execId) {

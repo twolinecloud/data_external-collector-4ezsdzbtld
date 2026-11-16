@@ -52,7 +52,7 @@ class LawZipWriterTest {
                 "law/법률/형법/별표/별표1.hwp",
                 "law/법률/형법/별표/별표1.pdf",
                 "law/시행령/마약류 관리에 관한 법률 시행령/마약류 관리에 관한 법률 시행령.json");
-            // Xenon 규약: manifest 는 업로드 요청의 별도 파트로 보낸다
+            // Genon 규약: manifest 는 업로드 요청의 별도 파트로 보낸다
             assertThat(new JSONObject(part.manifestJson()).getInt("documentCount")).isEqualTo(2);
             assertThat(part.jsonCount()).isEqualTo(2);
             assertThat(part.attachmentCount()).isEqualTo(2);
@@ -94,6 +94,7 @@ class LawZipWriterTest {
             assertThat(manifest.getInt("documentCount")).isEqualTo(1);
             assertThat(d.getString("path")).isEqualTo("admrul/예규/가석방 업무지침/가석방 업무지침.json");
             assertThat(d.getString("lawId")).isEqualTo("35334");
+            assertThat(d.isNull("mst")).isTrue(); // 모르면 null
             assertThat(d.getString("kind")).isEqualTo("예규");
             assertThat(d.getString("sha256")).hasSize(64);
             JSONObject f = d.getJSONArray("files").getJSONObject(0);
@@ -102,6 +103,16 @@ class LawZipWriterTest {
             assertThat(f.getInt("size")).isEqualTo(3);
             assertThat(f.getString("sha256")).isEqualTo(LawZipWriter.sha256(new byte[]{1, 2, 3}));
             assertThat(d.getJSONArray("skippedFiles").getJSONObject(0).getString("reason")).contains("zip");
+        }
+    }
+
+    @Test
+    void manifest에_mst가_문서별로_들어간다() throws Exception {
+        try (LawZipWriter writer = new LawZipWriter(dir, "law", 10_000_000, Instant.now())) {
+            writer.add(new PreparedDocument(doc("LAW", "1282", "검사의 보수에 관한 법률", "법률").withMst("290605"), List.of(), List.of()));
+            ZipPart part = writer.finish();
+            JSONObject d = new JSONObject(part.manifestJson()).getJSONArray("documents").getJSONObject(0);
+            assertThat(d.getString("mst")).isEqualTo("290605");
         }
     }
 

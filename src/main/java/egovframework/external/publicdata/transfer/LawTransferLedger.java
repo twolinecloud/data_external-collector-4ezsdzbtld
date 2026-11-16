@@ -15,12 +15,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * "이 문서의 이 내용을 이미 Xenon에 보냈다"는 기록 - 매일 전체(약 400MB, 첨부 다운로드 약 7천 회)를 다시 보내지 않고
+ * "이 문서의 이 내용을 이미 Genon에 보냈다"는 기록 - 매일 전체(약 400MB, 첨부 다운로드 약 7천 회)를 다시 보내지 않고
  * 바뀐 문서만 보내기 위한 것이다. 키는 {@link LawDocument#key()}, 값은 본문 JSON의 sha256.
  *
  * <p><b>기본은 메모리 전용</b>이라 파드가 재시작(배포 포함)되면 비고, 다음 수집에서 전체를 한 번 다시 보낸다 - 규약이
  * 중복 전송을 무해하다고 하므로 정합성 문제는 없고 비용만 든다. {@code public-data.law-transfer.ledger-file}에 영속 볼륨
- * 경로를 주면 파일로 이어받는다. 보냄 기록은 Xenon의 수신 확인(sha256 대조)이 끝난 뒤에만 남긴다.</p>
+ * 경로를 주면 파일로 이어받는다. 보냄 기록은 Genon의 수신 확인(sha256 대조)이 끝난 뒤에만 남긴다.</p>
  */
 @Component
 public class LawTransferLedger {

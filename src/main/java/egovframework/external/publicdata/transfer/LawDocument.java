@@ -10,10 +10,23 @@ import java.util.List;
  * @param lawId   법령ID / 행정규칙ID. 법령과 행정규칙은 ID 체계가 달라 같은 값이 나올 수 있으니 {@code docType}과 함께 써야 유일하다
  * @param name    응답에 적힌 현행 이름 - 대상 목록(CSV)의 옛 이름이 아니라 이 값을 폴더명으로 쓴다
  * @param kind    법종구분(법령: 법률/대통령령/부령...) 또는 행정규칙종류(훈령/예규...)
+ * @param mst     법령일련번호(행정규칙은 행정규칙일련번호) - manifest 에만 담는다. 행정규칙은 본문에 있어 파서가 채우고,
+ *                법령은 본문에 없어 전송 직전에 {@link LawMstLookup}으로 조회해 채운다. 모르면 null
  */
 public record LawDocument(String docType, String lawId, String name, String kind,
                           String promulgationDate, String effectiveDate, String ministry,
-                          String body, List<Annex> annexes, List<Attachment> attachments) {
+                          String body, List<Annex> annexes, List<Attachment> attachments, String mst) {
+
+    public LawDocument(String docType, String lawId, String name, String kind,
+                       String promulgationDate, String effectiveDate, String ministry,
+                       String body, List<Annex> annexes, List<Attachment> attachments) {
+        this(docType, lawId, name, kind, promulgationDate, effectiveDate, ministry, body, annexes, attachments, null);
+    }
+
+    public LawDocument withMst(String newMst) {
+        return new LawDocument(docType, lawId, name, kind, promulgationDate, effectiveDate, ministry,
+            body, annexes, attachments, newMst);
+    }
 
     public static final String LAW = "LAW";
     public static final String ADMIN_RULE = "ADMIN_RULE";

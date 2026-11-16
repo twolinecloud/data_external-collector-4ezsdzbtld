@@ -21,7 +21,7 @@ import java.util.function.Function;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class XenonIngestClientTest {
+class GenonIngestClientTest {
 
     @TempDir
     Path dir;
@@ -67,8 +67,8 @@ class XenonIngestClientTest {
         server.stop(0);
     }
 
-    private XenonIngestClient client(String apiKey, int attempts) {
-        return new XenonIngestClient(HttpClient.newHttpClient(), "http://127.0.0.1:" + server.getAddress().getPort() + "/",
+    private GenonIngestClient client(String apiKey, int attempts) {
+        return new GenonIngestClient(HttpClient.newHttpClient(), "http://127.0.0.1:" + server.getAddress().getPort() + "/",
             apiKey, attempts, Duration.ofSeconds(10), 1L);
     }
 
@@ -200,7 +200,7 @@ class XenonIngestClientTest {
         client("k", 1).upload(p);
 
         String body = new String(bodies.get(0), StandardCharsets.UTF_8);
-        // Xenon 은 manifest 도 파일(UploadFile)로 받는다 - filename 이 없으면 422 "Expected UploadFile, received: str"
+        // Genon 은 manifest 도 파일(UploadFile)로 받는다 - filename 이 없으면 422 "Expected UploadFile, received: str"
         assertThat(body).contains("name=\"manifest\"; filename=\"manifest.json\"").contains("Content-Type: application/json; charset=UTF-8")
             .contains("{\"documents\":[{\"lawId\":\"001692\"}]}");
         // manifest 가 파일보다 앞에 오고, 그래도 본문 길이를 미리 알려 chunked 를 피한다

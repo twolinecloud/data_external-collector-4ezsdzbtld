@@ -26,14 +26,14 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 /**
- * 정제가 끝난 법령/행정규칙을 Xenon(GenOS)에 ZIP으로 보낸다 - 법령 체인(수집→정제→<b>전송</b>)의 마지막 단계.
+ * 정제가 끝난 법령/행정규칙을 Genon(GenOS)에 ZIP으로 보낸다 - 법령 체인(수집→정제→<b>전송</b>)의 마지막 단계.
  *
  * <p>흐름: 수집 실행(run)의 CLEANSED 행 → 문서로 해석 → 지난번에 보낸 내용과 같은 문서는 제외({@link LawTransferLedger}) →
  * 연결 확인(ping) → 문서마다 별표·첨부 다운로드 → {@link LawZipWriter}로 ZIP(상한 넘으면 분할) → 완성되는 ZIP마다
  * 전송하고 응답 체크섬 대조 → 확인된 문서만 "보냄"으로 기록. 한 ZIP의 전송이 실패해도 다음 ZIP은 계속 시도하고,
  * 못 보낸 문서는 기록에 남지 않아 다음 수집 때 자동으로 다시 시도된다.</p>
  *
- * <p>{@code public-data.law-transfer.enabled=false}(기본값)면 아무 것도 하지 않는다 - 켜는 건 API 키와 Xenon 쪽 구조
+ * <p>{@code public-data.law-transfer.enabled=false}(기본값)면 아무 것도 하지 않는다 - 켜는 건 API 키와 Genon 쪽 구조
  * 합의가 끝난 뒤다. 끝나면 이 run의 모든 행을 LOAD_SKIPPED로 종결한다(법령은 적재기가 없어 원래도 그렇게 끝난다).</p>
  *
  * <p>첨부 다운로드가 일시적으로 실패한(5xx/타임아웃) 문서는 첨부를 빼고 보내지 않고 <b>통째로 이번 전송에서 제외</b>한다 -
@@ -50,6 +50,7 @@ public class LawTransferService {
     private final RawStagingStore store;
     private final LawFileFetcher fetcher;
     private final LawIngestPort ingest;
+    private final LawMstLookup mstLookup;
     private final LawTransferLedger ledger;
     private final boolean enabled;
     private final boolean sendAll;
@@ -62,6 +63,7 @@ public class LawTransferService {
         RawStagingStore store,
         LawFileFetcher fetcher,
         LawIngestPort ingest,
+        LawMstLookup mstLookup,
         LawTransferLedger ledger,
         @Value("${public-data.law-transfer.enabled:false}") boolean enabled,
         @Value("${public-data.law-transfer.send-all:false}") boolean sendAll,
@@ -73,6 +75,7 @@ public class LawTransferService {
         this.store = store;
         this.fetcher = fetcher;
         this.ingest = ingest;
+        this.mstLookup = mstLookup;
         this.ledger = ledger;
         this.enabled = enabled;
         this.sendAll = sendAll;
@@ -155,9 +158,9 @@ public class LawTransferService {
         try {
             ingest.ping();
         } catch (IOException e) {
-            logger.error("[SEND] Xenon 연결 확인 실패 - 내려받기 전에 전송 포기 (대상 {}건): {}", changed.size(), e.getMessage());
+            logger.error("[SEND] Genon 연결 확인 실패 - 내려받기 전에 전송 포기 (대상 {}건): {}", changed.size(), e.getMessage());
             tally.fail += changed.size();
-            return "Xenon 연결 실패: " + e.getMessage();
+            return "Genon 연결 실패: " + e.getMessage();
         }
 
         Path tmpDir = null;
@@ -183,7 +186,16 @@ public class LawTransferService {
     private void sendGroup(String top, List<LawDocument> docs, Path tmpDir, ExecutorService pool, Tally tally)
         throws IOException {
         try (LawZipWriter writer = new LawZipWriter(tmpDir, top, maxZipBytes, Instant.now())) {
-            for (LawDocument doc : docs) {
+            for (LawDocument original : docs) {
+                LawDocument doc;
+                try {
+                    doc = withMst(original);
+                } catch (LawMstLookup.LookupException e) {
+                    // MST 없이 보내고 "보냄"으로 기록하면 다음에 채워질 기회가 없다 - 첨부 일시 실패와 같게 이번 전송에서 뺀다.
+                    logger.warn("[SEND] MST 조회 실패로 이번 전송에서 제외 {} ({}): {}", original.name(), original.key(), e.getMessage());
+                    tally.fail++;
+                    continue;
+                }
                 PreparedDocument prepared;
                 try {
                     prepared = prepare(doc, pool);
@@ -196,6 +208,18 @@ public class LawTransferService {
             }
             sendCompleted(writer.finish(), tally);
         }
+    }
+
+    /** 본문에 MST가 없는 법령만 조회한다(행정규칙은 파서가 이미 채웠다). 검색에 없으면 null 로 두고 보낸다. */
+    private LawDocument withMst(LawDocument doc) throws LawMstLookup.LookupException {
+        if (doc.mst() != null || !LawDocument.LAW.equals(doc.docType())) {
+            return doc;
+        }
+        String mst = mstLookup.find(doc);
+        if (mst == null) {
+            logger.warn("[SEND] 법제처 검색에서 MST를 찾지 못함 - manifest 의 mst 는 null {} ({})", doc.name(), doc.key());
+        }
+        return doc.withMst(mst);
     }
 
     private void sendCompleted(ZipPart part, Tally tally) {

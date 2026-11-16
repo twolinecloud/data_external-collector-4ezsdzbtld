@@ -239,18 +239,18 @@ public-data:
     # csv: classpath:moleg-criminal-laws.csv - 로컬 개발/롤백용으로 남겨 둔다(PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE=csv).
     # db 일 때 AdminDbConfig 가 활성화된다(public-data.load.enabled 와는 별개).
     law-target-source: ${PUBLIC_DATA_MOLEG_LAW_TARGET_SOURCE:db}
-  # 법령 Xenon(GenOS) 전송 - 정제가 끝난 법령/행정규칙(본문 JSON + 별표·첨부)을 ZIP으로 묶어 보낸다.
-  # 법령 체인의 마지막(SEND) 단계 (LawTransferService). 규약: private-doc/xenon_protocol.pdf.
-  # 기본 꺼짐 - API 키 발급과 Xenon 쪽 폴더 구조 합의 후 LAW_TRANSFER_ENABLED=true + XENON_API_KEY 로 켠다.
+  # 법령 Genon(GenOS) 전송 - 정제가 끝난 법령/행정규칙(본문 JSON + 별표·첨부)을 ZIP으로 묶어 보낸다.
+  # 법령 체인의 마지막(SEND) 단계 (LawTransferService). 규약: private-doc/genon_protocol.pdf.
+  # 기본 꺼짐 - API 키 발급과 Genon 쪽 폴더 구조 합의 후 LAW_TRANSFER_ENABLED=true + GENON_API_KEY 로 켠다(예전 이름 XENON_* 환경변수도 계속 받는다).
   law-transfer:
     enabled: ${LAW_TRANSFER_ENABLED:false}
-    xenon:
-      base-url: ${XENON_BASE_URL:https://genos.genon.ai/api/gateway/code_serving/800}
+    genon:
+      base-url: ${GENON_BASE_URL:${XENON_BASE_URL:https://genos.genon.ai/api/gateway/code_serving/800}}
       # Bearer 토큰 - 값은 K8s Secret 으로만 주입한다(저장소/로그에 남기지 않는다).
-      api-key: ${XENON_API_KEY:}
-      max-attempts: ${XENON_MAX_ATTEMPTS:3}
-      upload-timeout: ${XENON_UPLOAD_TIMEOUT:10m}
-    # ZIP 하나의 상한(압축 후). 전체가 수백 MB라 넘으면 ZIP을 나눠 보낸다. Xenon 쪽 상한은 아직 모른다 - 확인 후 조정.
+      api-key: ${GENON_API_KEY:${XENON_API_KEY:}}
+      max-attempts: ${GENON_MAX_ATTEMPTS:${XENON_MAX_ATTEMPTS:3}}
+      upload-timeout: ${GENON_UPLOAD_TIMEOUT:${XENON_UPLOAD_TIMEOUT:10m}}
+    # ZIP 하나의 상한(압축 후). 전체가 수백 MB라 넘으면 ZIP을 나눠 보낸다. Genon 쪽 상한은 아직 모른다 - 확인 후 조정.
     max-zip-bytes: ${LAW_TRANSFER_MAX_ZIP_BYTES:52428800}
     # true면 변경 여부와 무관하게 매번 전체를 보낸다(기본은 지난번에 보낸 것과 본문이 같은 문서는 제외).
     send-all: ${LAW_TRANSFER_SEND_ALL:false}

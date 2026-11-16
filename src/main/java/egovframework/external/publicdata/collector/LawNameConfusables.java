@@ -28,7 +28,7 @@ import java.util.Set;
  * 방향으로만 정규화하지 않고, 호출부({@link DirectLawSourceAdapter})가 target에 맞는
  * 메서드({@link #normalizeForLaw}/{@link #normalizeForAdminRule})를 골라 쓰도록 분리한다.</p>
  */
-final class LawNameConfusables {
+public final class LawNameConfusables {
 
     private static final char STANDARD_DOT = '·';   // U+00B7 MIDDLE DOT - admrul이 요구
     private static final char LOOKALIKE_DOT = 'ㆍ';  // U+318D 한글 자모 아래아 - eflaw가 요구
@@ -55,7 +55,7 @@ final class LawNameConfusables {
     }
 
     /** {@code target=eflaw}(법령) 호출 직전용 - 유사문자(ㆍ)로 통일. */
-    static String normalizeForLaw(String name) {
+    public static String normalizeForLaw(String name) {
         return normalizeTo(name, LOOKALIKE_DOT);
     }
 

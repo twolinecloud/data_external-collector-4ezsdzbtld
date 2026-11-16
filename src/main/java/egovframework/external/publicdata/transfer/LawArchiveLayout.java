@@ -5,7 +5,7 @@ import java.text.Normalizer;
 import java.util.Locale;
 
 /**
- * ZIP 안의 경로를 정하는 곳 - <b>폴더 배치 규칙은 전부 여기에만 있다.</b> Xenon이 유형 폴더 구조를 받아주지
+ * ZIP 안의 경로를 정하는 곳 - <b>폴더 배치 규칙은 전부 여기에만 있다.</b> Genon이 유형 폴더 구조를 받아주지
  * 않으면 {@link #documentDir}만 {@code law/<법령명>}으로 바꾸면 된다.
  *
  * <pre>

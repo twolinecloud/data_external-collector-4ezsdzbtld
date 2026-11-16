@@ -37,6 +37,17 @@ class LawDocumentParserTest {
         """;
 
     @Test
+    void 행정규칙은_본문의_행정규칙일련번호를_mst로_읽고_법령은_null이다() {
+        String rule = """
+            [{"AdmRulService": {"행정규칙기본정보": {"행정규칙명": "x", "행정규칙ID": "1", "행정규칙종류": "훈령",
+                                              "행정규칙일련번호": "2100000285400"}}}]
+            """;
+        assertThat(LawDocumentParser.parse(rule).get(0).mst()).isEqualTo("2100000285400");
+        assertThat(LawDocumentParser.parse(ADMIN_RULE).get(0).mst()).isNull();
+        assertThat(LawDocumentParser.parse(LAW).get(0).mst()).isNull();
+    }
+
+    @Test
     void 법령은_기본정보와_별표를_읽고_상대경로_링크에_호스트를_붙인다() {
         LawDocument doc = LawDocumentParser.parse(LAW).get(0);
 

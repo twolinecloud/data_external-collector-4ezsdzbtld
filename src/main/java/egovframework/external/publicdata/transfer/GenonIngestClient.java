@@ -22,7 +22,7 @@ import java.util.Collections;
 import java.util.UUID;
 
 /**
- * Xenon(GenOS Code Serving 800) 법령 수신 API 클라이언트 - {@code private-doc/xenon_protocol.pdf} 기준.
+ * Genon(GenOS Code Serving 800) 법령 수신 API 클라이언트 - {@code private-doc/genon_protocol.pdf} 기준.
  *
  * <ul>
  *   <li>{@code POST {base}/api/v1/law/ingest}, {@code Authorization: Bearer}, multipart 필드 {@code file}(application/zip) 1개</li>
@@ -40,9 +40,9 @@ import java.util.UUID;
  * 응답의 {@code zip.json}은 본문 JSON 수, {@code top_level_count}는 최상위 폴더 수와 정확히 같아야 한다(2026-10-27).</p>
  */
 @Component
-public class XenonIngestClient implements LawIngestPort {
+public class GenonIngestClient implements LawIngestPort {
 
-    private static final Logger logger = LogManager.getLogger(XenonIngestClient.class);
+    private static final Logger logger = LogManager.getLogger(GenonIngestClient.class);
 
     private final HttpClient client;
     private final String baseUrl;
@@ -52,17 +52,17 @@ public class XenonIngestClient implements LawIngestPort {
     private final long retryDelayMillis;
 
     @Autowired
-    public XenonIngestClient(
-        @Value("${public-data.law-transfer.xenon.base-url}") String baseUrl,
-        @Value("${public-data.law-transfer.xenon.api-key:}") String apiKey,
-        @Value("${public-data.law-transfer.xenon.max-attempts:3}") int maxAttempts,
-        @Value("${public-data.law-transfer.xenon.upload-timeout:10m}") Duration uploadTimeout
+    public GenonIngestClient(
+        @Value("${public-data.law-transfer.genon.base-url}") String baseUrl,
+        @Value("${public-data.law-transfer.genon.api-key:}") String apiKey,
+        @Value("${public-data.law-transfer.genon.max-attempts:3}") int maxAttempts,
+        @Value("${public-data.law-transfer.genon.upload-timeout:10m}") Duration uploadTimeout
     ) {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build(),
             baseUrl, apiKey, maxAttempts, uploadTimeout, 5_000L);
     }
 
-    XenonIngestClient(HttpClient client, String baseUrl, String apiKey, int maxAttempts,
+    GenonIngestClient(HttpClient client, String baseUrl, String apiKey, int maxAttempts,
                       Duration uploadTimeout, long retryDelayMillis) {
         this.client = client;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -81,7 +81,7 @@ public class XenonIngestClient implements LawIngestPort {
             .GET().build();
         HttpResponse<String> response = send(request);
         if (response.statusCode() != 200) {
-            throw new IngestException("Xenon ping 실패: HTTP " + response.statusCode());
+            throw new IngestException("Genon ping 실패: HTTP " + response.statusCode());
         }
     }
 
@@ -96,7 +96,7 @@ public class XenonIngestClient implements LawIngestPort {
                 return receipt;
             } catch (IngestException e) {
                 last = e;
-                logger.warn("[SEND] Xenon 전송 실패 part={} attempt={}/{}: {}", part.index(), attempt, maxAttempts, e.getMessage());
+                logger.warn("[SEND] Genon 전송 실패 part={} attempt={}/{}: {}", part.index(), attempt, maxAttempts, e.getMessage());
                 if (!e.retryable()) {
                     break; // 요청 자체가 잘못됐다는 응답이라 같은 ZIP을 다시 올려도 같다(수십 MB를 헛되이 반복하지 않는다)
                 }
@@ -111,7 +111,7 @@ public class XenonIngestClient implements LawIngestPort {
     private Receipt uploadOnce(ZipPart part) throws IngestException {
         String boundary = "----law" + UUID.randomUUID().toString().replace("-", "");
         String fileName = part.file().getFileName().toString();
-        // Xenon 규약: manifest 는 ZIP 에 넣지 않고 같은 요청의 'manifest' 파트로 보낸다(없으면 422 "manifest 가 없습니다").
+        // Genon 규약: manifest 는 ZIP 에 넣지 않고 같은 요청의 'manifest' 파트로 보낸다(없으면 422 "manifest 가 없습니다").
         // 그 파트도 파일(UploadFile)이어야 해서 filename 을 붙인다 - 없으면 422 "Expected UploadFile, received: str".
         // 작은 필드를 먼저 보내고 ZIP 을 뒤에 붙인다.
         byte[] manifest = (part.manifestJson() == null ? "" : part.manifestJson()).getBytes(StandardCharsets.UTF_8);
@@ -139,7 +139,7 @@ public class XenonIngestClient implements LawIngestPort {
         if (response.statusCode() != 200) {
             int code = response.statusCode();
             boolean clientError = code >= 400 && code < 500 && code != 408 && code != 429;
-            throw new IngestException("Xenon 응답 HTTP " + code + ": " + abbreviate(response.body()), !clientError);
+            throw new IngestException("Genon 응답 HTTP " + code + ": " + abbreviate(response.body()), !clientError);
         }
         return parse(response.body());
     }
@@ -196,7 +196,7 @@ public class XenonIngestClient implements LawIngestPort {
         if (r.topLevelCount() != part.topLevelFolders()) {
             throw new IngestException("zip.top_level_count 불일치: 폴더=" + part.topLevelFolders() + " 응답=" + r.topLevelCount());
         }
-        logger.info("[SEND] Xenon 수신 확인 part={} size={} json={}(본문 {}) top_level={}(폴더 {}) attachments={}(보냄 {})",
+        logger.info("[SEND] Genon 수신 확인 part={} size={} json={}(본문 {}) top_level={}(폴더 {}) attachments={}(보냄 {})",
             part.index(), r.sizeBytes(), r.zipJson(), part.jsonCount(), r.topLevelCount(), part.topLevelFolders(),
             r.zipAttachments(), part.attachmentCount());
     }
@@ -205,16 +205,16 @@ public class XenonIngestClient implements LawIngestPort {
         try {
             return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            throw new IngestException("Xenon 호출 실패: " + e.getMessage(), e);
+            throw new IngestException("Genon 호출 실패: " + e.getMessage(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IngestException("Xenon 호출 중단", e);
+            throw new IngestException("Genon 호출 중단", e);
         }
     }
 
     private void requireApiKey() throws IngestException {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IngestException("Xenon API 키가 설정되지 않음 (XENON_API_KEY)");
+            throw new IngestException("Genon API 키가 설정되지 않음 (GENON_API_KEY)");
         }
     }
 

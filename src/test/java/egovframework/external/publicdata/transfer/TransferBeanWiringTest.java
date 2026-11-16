@@ -36,8 +36,8 @@ class TransferBeanWiringTest {
     void 전송_빈이_모두_생성된다() {
         try (AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext()) {
             ctx.getEnvironment().getPropertySources().addFirst(new MapPropertySource("t", Map.of(
-                "public-data.law-transfer.xenon.base-url", "http://127.0.0.1:1/",
-                "public-data.law-transfer.xenon.api-key", "x")));
+                "public-data.law-transfer.genon.base-url", "http://127.0.0.1:1/",
+                "public-data.law-transfer.genon.api-key", "x")));
             // 실제 앱(SpringApplication)과 같게 "60s" 같은 값을 Duration 으로 바꾸는 변환기를 붙인다.
             ctx.getBeanFactory().setConversionService(ApplicationConversionService.getSharedInstance());
             ctx.register(Config.class);

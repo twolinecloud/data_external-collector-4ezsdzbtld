@@ -106,15 +106,15 @@
 
 세 스크립트는 모두 이미 실행한 기록용이며 다시 실행하지 않는다(재실행하면 `DELETE`로 이후 편집분이 사라진다).
 
-## 법령 Xenon(GenOS) 전송
+## 법령 Genon(GenOS) 전송
 
-정제가 끝난 법령·행정규칙을 ZIP으로 묶어 Xenon에 보낸다. 법령 체인(수집 → 정제 → **SEND**)의 마지막 단계이고, 로그 컬렉터에는 `SEND` 스텝(stepSeq 3)으로 같은 execId에 이어붙는다. 규약은 `private-doc/xenon_protocol.pdf`. **기본은 꺼짐**이라 켜기 전까지 법령은 예전처럼 정제에서 배치를 닫는다.
+정제가 끝난 법령·행정규칙을 ZIP으로 묶어 Genon에 보낸다. 법령 체인(수집 → 정제 → **SEND**)의 마지막 단계이고, 로그 컬렉터에는 `SEND` 스텝(stepSeq 3)으로 같은 execId에 이어붙는다. 규약은 `private-doc/genon_protocol.pdf`. **기본은 꺼짐**이라 켜기 전까지 법령은 예전처럼 정제에서 배치를 닫는다.
 
 | 설정 | 환경변수 | 기본값 | 설명 |
 |---|---|---|---|
 | `public-data.law-transfer.enabled` | `LAW_TRANSFER_ENABLED` | `false` | 전송 켜기 |
-| `...xenon.api-key` | `XENON_API_KEY` | (없음) | Bearer 토큰. **K8s Secret 으로만 주입** |
-| `...xenon.base-url` | `XENON_BASE_URL` | 운영 Code Serving 800 | |
+| `...genon.api-key` | `GENON_API_KEY` | (없음) | Bearer 토큰. **K8s Secret 으로만 주입** |
+| `...genon.base-url` | `GENON_BASE_URL` | 운영 Code Serving 800 | |
 | `...max-zip-bytes` | `LAW_TRANSFER_MAX_ZIP_BYTES` | 50MB | ZIP 하나의 상한(압축 후). 넘으면 문서 단위로 나눠 여러 ZIP |
 | `...send-all` | `LAW_TRANSFER_SEND_ALL` | `false` | true면 변경 여부와 무관하게 전체 전송 |
 | `...include-images` | `LAW_TRANSFER_INCLUDE_IMAGES` | `false` | 별표 GIF 포함 여부(같은 내용의 PDF가 있어 기본 제외) |
@@ -129,16 +129,16 @@ admrul/{훈령,예규,...}/<규칙명>/<규칙명>.json
                                    /별표/...   /첨부/첨부1.hwp ...
 ```
 
-- manifest(문서별 법령ID·종류·시행일·sha256·첨부 목록, 건너뛴 첨부와 사유)는 **ZIP에 넣지 않고** 업로드 요청의 `manifest` 파일 파트로 함께 보낸다(멀티파트: `manifest` = manifest.json, `file` = ZIP). Xenon 규약, 2026-10-27 테스트 전송으로 확인.
+- manifest(문서별 법령ID·종류·시행일·sha256·첨부 목록, 건너뛴 첨부와 사유)는 **ZIP에 넣지 않고** 업로드 요청의 `manifest` 파일 파트로 함께 보낸다(멀티파트: `manifest` = manifest.json, `file` = ZIP). Genon 규약, 2026-10-27 테스트 전송으로 확인.
 
 - 유형은 이름이 아니라 **법종구분**으로 나눈다: 법률(대통령긴급명령 포함)→`법률`, 대통령령→`시행령`, 부령·총리령·대법원규칙→`시행규칙`. 폴더 이름은 법적 의미가 아니라 유형 표시다(상위 법률이 없는 독립 대통령령도 `시행령`).
 - 폴더명은 대상 목록의 이름이 아니라 **응답의 현행 이름**을 쓴다(정부조직 개편으로 목록의 이름이 낡을 수 있다). 끝 공백·금지 문자는 정리한다.
-- **이 구조는 규약의 "2단계 폴더 = 법령명 1건"과 다르다(유형 폴더가 한 단계 더 있다).** Xenon이 받아주지 않으면 `LawArchiveLayout.documentDir` 만 `law/<법령명>`으로 바꾼다.
+- **이 구조는 규약의 "2단계 폴더 = 법령명 1건"과 다르다(유형 폴더가 한 단계 더 있다).** Genon이 받아주지 않으면 `LawArchiveLayout.documentDir` 만 `law/<법령명>`으로 바꾼다.
 - 규약 허용 확장자가 아닌 첨부(행정규칙 `.zip` 5건)는 ZIP에 넣지 않고 manifest 에 사유를 남긴다.
 
 ### 동작
 
-- 지난번에 보낸 것과 본문(sha256)이 같은 문서는 보내지 않는다. 보냄 기록은 Xenon 응답(sha256·size_bytes·zip.json·zip.top_level_count)을 대조해 맞았을 때만 남긴다.
+- 지난번에 보낸 것과 본문(sha256)이 같은 문서는 보내지 않는다. 보냄 기록은 Genon 응답(sha256·size_bytes·zip.json·zip.top_level_count)을 대조해 맞았을 때만 남긴다.
 - 전송 전에 `GET /api/v1/ping` 으로 인증을 확인한다 - 키가 틀리면 수백 MB를 내려받기 전에 포기한다.
 - 첨부 다운로드가 일시 실패(5xx/타임아웃)한 문서는 통째로 이번 전송에서 빠지고 다음 수집에 다시 시도한다. 404/410은 그 파일만 건너뛴다.
 - 대조에서 어긋나면 `max-attempts`(3)까지 재전송한다(같은 파일 중복 전송은 규약상 무해).

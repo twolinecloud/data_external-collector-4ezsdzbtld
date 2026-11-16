@@ -2,7 +2,7 @@ package egovframework.external.publicdata.transfer;
 
 import java.io.IOException;
 
-/** 법령 ZIP을 받는 쪽(Xenon/GenOS)에 대한 포트 - 테스트에서 가짜로 갈아끼우려고 분리. */
+/** 법령 ZIP을 받는 쪽(Genon/GenOS)에 대한 포트 - 테스트에서 가짜로 갈아끼우려고 분리. */
 public interface LawIngestPort {
 
     /** 인증과 연결을 확인한다. 실패하면 수백 MB를 내려받기 전에 전송을 포기하려고 쓴다. */

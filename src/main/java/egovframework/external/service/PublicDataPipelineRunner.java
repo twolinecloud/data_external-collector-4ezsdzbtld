@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p><b>배치를 닫는 규칙</b>: 각 단계는 끝날 때 스텝만 닫고, 배치는 "이 run에서 다음 단계로
  * 넘어갈 행이 더 없을 때" 그 단계가 닫는다. 그래서 수집이 0건이면 수집에서, 정제가 전부 실패하거나
- * 적재가 꺼져 있으면 정제에서, 법령은 Xenon 전송(SEND)이 꺼져 있으면(적재기 없음) 정제에서 켜져 있으면 전송에서,
+ * 적재가 꺼져 있으면 정제에서, 법령은 Genon 전송(SEND)이 꺼져 있으면(적재기 없음) 정제에서 켜져 있으면 전송에서,
  * 공공데이터는 적재 재시도까지 전부 끝난 뒤(LOADED 또는 LOAD_ABANDONED) 적재에서 닫힌다. 최종 상태는 거쳐온 단계 중 가장 나쁜 결과다
  * - 수집이 PARTIAL이면 적재가 전부 성공해도 PARTIAL.</p>
  *
@@ -308,7 +308,7 @@ public class PublicDataPipelineRunner {
     }
 
     /**
-     * 법령(Xenon) 전송 단계 - 정제 직후 같은 배치에 SEND 스텝을 이어붙이고 거기서 배치를 닫는다. 배치의 최종 건수는 전송
+     * 법령(Genon) 전송 단계 - 정제 직후 같은 배치에 SEND 스텝을 이어붙이고 거기서 배치를 닫는다. 배치의 최종 건수는 전송
      * 대상(변경된 문서)이 있으면 그 건수, 변경이 없어 보낼 게 없었으면 정제 건수를 쓴다.
      */
     private void sendLawRun(String runId, RunState state, CleanseResult cleanse) {
