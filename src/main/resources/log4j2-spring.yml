@@ -36,8 +36,8 @@ Configuration:
           Delete:
             basePath: "${log-path}/archive"
             maxDepth: "1"
-            IfAccumulatedFileCount:
-              exceeds: 31
+            IfLastModified:
+              age: 120d
   Loggers:
     Root:
       level: info
