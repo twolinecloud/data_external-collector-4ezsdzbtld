@@ -68,7 +68,7 @@ public class RuleEvaluationService {
     private static final DateTimeFormatter TM_FC = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
     private final RawStagingStore rawStagingStore;
-    private final FacilityVulnerabilityLoader vulnerabilityLoader;
+    private final FacilityVulnerabilitySource vulnerabilityLoader;
     private final FacilitySidoLoader facilitySidoLoader;
     private final KmaWarningStationLoader warningStationLoader;
     private final CleansedJsonDropWriter jsonDropWriter;

@@ -12,7 +12,7 @@
 | `SAFETYDATA_SERVICE_KEY` | 재난안전데이터공유플랫폼 긴급재난문자 | |
 | `MOLEG_OC` | 법제처 국가법령정보 | 값은 신청자 ID. **호출 서버 IP 등록 필요** |
 | `GENON_API_KEY` (옛 `XENON_API_KEY`) | Genon 법령 전송 | 내부, Bearer 토큰 |
-| `VWORLD_API_KEY` | VWorld 지오코딩 | 사용하지 않기로 함, 제거 예정 |
+| `VWORLD_API_KEY` | VWorld 지오코딩 | 효과가 없어 향후 제거 예정(당분간 유지) |
 | `ADMIN_DB_*` | admin-db 접속 | |
 
 - OpenTopoData(해발 조회)는 키가 없다.

@@ -43,4 +43,19 @@ public interface InstitutionDimMapper {
         ORDER BY corr_instt_cd
         """)
     List<Map<String, Object>> selectActiveCorrectionalFacilities();
+
+    /**
+     * 시설별 산사태/침수 취약도({@code terrain_info.vulnerability}, 지형 계산 결과). 값이 없는 시설은 나오지 않는다.
+     * 풍랑은 마스터에 없다.
+     */
+    @Select("""
+        SELECT corr_instt_cd AS "corrInsttCd", corr_instt_nm AS "corrInsttNm",
+               terrain_info->'vulnerability'->>'landslide' AS "landslide",
+               terrain_info->'vulnerability'->>'flood' AS "flood"
+        FROM kcais.tb_dim_instt
+        WHERE terrain_info IS NOT NULL
+          AND (use_yn IS NULL OR use_yn <> 'N')
+        ORDER BY corr_instt_cd
+        """)
+    List<Map<String, Object>> selectTerrainVulnerabilities();
 }

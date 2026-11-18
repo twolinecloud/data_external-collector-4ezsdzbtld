@@ -188,6 +188,9 @@ public-data:
     # AdminDbConfig가 활성화됨(public-data.load.enabled와는 별개). db 조회 실패 시 그 틱만
     # 빈 목록으로 건너뜀, 앱은 안 죽음(DbFacilityMasterSource).
     master-source: ${PUBLIC_DATA_FACILITY_MASTER_SOURCE:csv}
+    # 룰 평가의 시설별 취약도(산사태/침수) 원천 - db(기본): tb_dim_instt.terrain_info(시설 마스터, 2026-11-18),
+    # 값이 없는 시설은 facility-vulnerability.csv 값으로 대체. csv: CSV만 사용(롤백용).
+    vulnerability-source: ${PUBLIC_DATA_FACILITY_VULNERABILITY_SOURCE:db}
   kma:
     village-forecast:
       endpoint: ${KMA_VILLAGE_FORECAST_ENDPOINT:https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0}

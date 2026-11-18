@@ -53,10 +53,10 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 
 ## 6. 남은 후속 작업
 1. ESB 전환([esb-migration.md](esb-migration.md)).
-2. admin-api의 `tb_dim_instt` 전환은 배포 완료(2026-11-18). 수집기 쪽 남은 일:
-   - 수집기가 취약도를 `facility-vulnerability.csv` 대신 `tb_dim_instt.terrain_info`에서 읽도록 바꾼다. 먼저 바꾸면 화면에서 고친 값이 수집기에 반영되지 않는다.
-   - VWorld 호출(`VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로)과 `VWORLD_API_KEY`를 제거한다.
-3. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
+2. 시설 취약도 원천 전환은 **완료**(2026-11-18 커밋, push 시 배포): 룰 평가(`RuleEvaluationService`)가 `tb_dim_instt.terrain_info.vulnerability`를 읽는다(`DbFacilityVulnerabilitySource`). DB에 값이 없는 시설은 `facility-vulnerability.csv` 값으로 대체되고, 조회가 실패하면 CSV 전체를 쓴다. 롤백은 `PUBLIC_DATA_FACILITY_VULNERABILITY_SOURCE=csv`. 전환 전 DB와 CSV는 59곳 모두 같았고, 풍랑은 마스터에 없어 전 시설 MEDIUM(CSV 값)이다. 룰 평가는 현재 `RuleEvaluationController` API로만 호출된다(스케줄 없음).
+   - 전환 때 DB에서 시설을 더 이상 쓰지 않게 되면 CSV와 `FacilityVulnerabilityLoader`를 제거할 수 있다.
+3. **VWorld 제거(향후)**: 당분간 유지한다. 자동 지오코딩은 성공률 19%라 쓸모가 없고 신규 좌표는 Google Maps URL 입력(admin-api)으로 대체됐으므로 `VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로, `VWORLD_API_KEY`는 나중에 제거한다.
+4. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
 
 ## 7. 알려진 한계
 - 재난문자 API는 "오늘" 날짜만 조회한다. 업스트림이 장애 후 소급 반영하면(11-14, 11-15 사례) 그 날짜분이 DB에 빠진다. 해당 두 날짜는 복구하지 않았다.
