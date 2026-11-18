@@ -2,8 +2,8 @@
 
 ##1. Environment
 - Maven 3.0 이상
-- JAVA 1.8
-- SpringBoot 3.2
+- JAVA 17
+- SpringBoot 3.2 (자세한 인수인계 자료는 `docs/README.md`)
 
 ##2. Project Run
 - Run Server
