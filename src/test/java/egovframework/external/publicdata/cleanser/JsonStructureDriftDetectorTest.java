@@ -45,6 +45,26 @@ class JsonStructureDriftDetectorTest {
     }
 
     @Test
+    void 원소가_없어도_정상인_프로브는_아무것도_관찰되지_않으면_MISSING을_남기지_않는다() {
+        StructureProbe probe = new StructureProbe("item", Set.of("a", "b"), Set.of("a", "b"),
+            items -> Set.of(), true);
+        detector.check(fixedProbeCleanser(probe), "op", "[]");
+
+        assertThat(meterRegistry.getMeters()).isEmpty();
+    }
+
+    @Test
+    void 원소가_없어도_정상인_프로브라도_일부_필드만_빠지면_MISSING을_남긴다() {
+        StructureProbe probe = new StructureProbe("item", Set.of("a", "b"), Set.of("a", "b"),
+            StructureProbeSupport::unionKeys, true);
+        String raw = new JSONArray().put(new JSONObject().put("a", 1)).toString();
+        detector.check(fixedProbeCleanser(probe), "op", raw);
+
+        assertThat(meterRegistry.get("public_data_cleanse_structure_drift_total")
+            .tag("driftType", "MISSING").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
     void 필수_필드가_관찰안되면_MISSING으로_메트릭을_남긴다() {
         StructureProbe probe = new StructureProbe("item", Set.of("a", "b"), Set.of("a", "b"),
             StructureProbeSupport::unionKeys);

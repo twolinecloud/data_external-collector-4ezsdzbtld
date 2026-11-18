@@ -68,6 +68,9 @@ public class JsonStructureDriftDetector {
         }
 
         Set<String> missing = new LinkedHashSet<>(probe.requiredFields());
+        if (probe.skipMissingWhenNoneObserved() && observed.isEmpty()) {
+            missing.clear();
+        }
         missing.removeAll(observed);
         if (!missing.isEmpty()) {
             logger.warn("[STRUCTURE-DRIFT][MISSING-FIELD] operationKey={} label={} 예상 필드 없음={} - API 응답 구조가 바뀌었을 수 있음",

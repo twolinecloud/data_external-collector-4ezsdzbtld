@@ -32,17 +32,23 @@ public class MolegCriminalLawCleanser implements PublicDataCleanser {
     private static final Set<String> LAW_FIELDS =
         Set.of("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙");
 
+    /**
+     * {@code 법령} 직속 키 중 법령에 따라 있을 수도 없을 수도 있는 선택 필드. 2026-11-18 운영 로그에서 495건 중
+     * 일부에만 {@code 별표}가 붙는 것을 확인(전부 정상 응답이라 경고 대상이 아님).
+     */
+    private static final Set<String> LAW_OPTIONAL_FIELDS = Set.of("별표");
+
     /** {@code 조문단위} 원소가 조문/전문 어느 쪽이든 항상 갖는 필드 (2026-08-14 전수확인, 100%). */
     private static final Set<String> ARTICLE_UNIT_COMMON_FIELDS = Set.of(
         "조문내용", "조문번호", "조문변경여부", "조문시행일자", "조문여부", "조문이동이전", "조문이동이후", "조문키");
 
     /** 조문여부="조문"인 원소가 추가로 가질 수 있는 선택 필드 (실측: 조문가지번호 7~19%, 조문제목 98~99%, 조문참고자료 36~38%, 항 36~52%). */
     private static final Set<String> JOMUN_KNOWN_FIELDS =
-        union(ARTICLE_UNIT_COMMON_FIELDS, Set.of("조문가지번호", "조문제목", "조문참고자료", "항"));
+        union(ARTICLE_UNIT_COMMON_FIELDS, Set.of("조문가지번호", "조문제목", "조문참고자료", "항", "조문제개정유형"));
 
     /** 조문여부="전문"인 원소가 추가로 가질 수 있는 선택 필드 (실측: 조문가지번호가 드물게 붙는 경우 있음). */
     private static final Set<String> JEONMUN_KNOWN_FIELDS =
-        union(ARTICLE_UNIT_COMMON_FIELDS, Set.of("조문가지번호"));
+        union(ARTICLE_UNIT_COMMON_FIELDS, Set.of("조문가지번호", "조문제목", "조문제개정유형"));
 
     @Override
     public boolean supports(String operationKey) {
@@ -52,11 +58,13 @@ public class MolegCriminalLawCleanser implements PublicDataCleanser {
     @Override
     public List<StructureProbe> structureProbes() {
         return List.of(
-            new StructureProbe("법령", LAW_FIELDS, LAW_FIELDS, MolegCriminalLawCleanser::observeLawFields),
+            new StructureProbe("법령", union(LAW_FIELDS, LAW_OPTIONAL_FIELDS), LAW_FIELDS,
+                MolegCriminalLawCleanser::observeLawFields),
             new StructureProbe("조문단위:조문", JOMUN_KNOWN_FIELDS, ARTICLE_UNIT_COMMON_FIELDS,
                 items -> observeArticleUnitFields(items, "조문")),
+            // 전문 항목(편·장 제목 등)이 아예 없는 법령이 정상으로 많다 - 원소가 없으면 누락 경고를 내지 않는다.
             new StructureProbe("조문단위:전문", JEONMUN_KNOWN_FIELDS, ARTICLE_UNIT_COMMON_FIELDS,
-                items -> observeArticleUnitFields(items, "전문"))
+                items -> observeArticleUnitFields(items, "전문"), true)
         );
     }
 

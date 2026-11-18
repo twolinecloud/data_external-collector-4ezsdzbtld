@@ -56,7 +56,9 @@ class MolegCriminalLawCleanserTest {
 
         java.util.Set<String> observed = probe.observer().apply(new JSONArray(raw));
         assertThat(observed).containsExactlyInAnyOrder("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙");
-        assertThat(probe.knownFields()).containsExactlyInAnyOrderElementsOf(observed);
+        // 알려진 필드 = 항상 있는 6개 + 법령에 따라 있는 선택 필드(별표)
+        assertThat(probe.knownFields()).containsExactlyInAnyOrder("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙", "별표");
+        assertThat(probe.requiredFields()).containsExactlyInAnyOrderElementsOf(observed);
     }
 
     @Test

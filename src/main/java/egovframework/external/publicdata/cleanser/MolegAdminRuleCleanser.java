@@ -30,6 +30,9 @@ public class MolegAdminRuleCleanser implements PublicDataCleanser {
     private static final Set<String> ADMIN_RULE_FIELDS =
         Set.of("개정문", "별표", "행정규칙기본정보", "조문내용", "첨부파일", "부칙", "제개정이유");
 
+    /** 규칙마다 없을 수 있는 필드(2026-11-18 운영 로그: 개정문·별표·제개정이유·첨부파일이 일부 규칙에 없음)를 뺀 항상 있는 필드. */
+    private static final Set<String> ADMIN_RULE_REQUIRED_FIELDS = Set.of("행정규칙기본정보", "조문내용");
+
     @Override
     public boolean supports(String operationKey) {
         return "moleg-admin-rule".equals(operationKey);
@@ -38,7 +41,7 @@ public class MolegAdminRuleCleanser implements PublicDataCleanser {
     @Override
     public List<StructureProbe> structureProbes() {
         return List.of(
-            new StructureProbe("AdmRulService", ADMIN_RULE_FIELDS, ADMIN_RULE_FIELDS,
+            new StructureProbe("AdmRulService", ADMIN_RULE_FIELDS, ADMIN_RULE_REQUIRED_FIELDS,
                 MolegAdminRuleCleanser::observeAdminRuleFields)
         );
     }

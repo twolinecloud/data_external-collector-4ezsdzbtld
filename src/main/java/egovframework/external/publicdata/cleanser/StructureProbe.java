@@ -19,11 +19,19 @@ import java.util.function.Function;
  *                       넣고 여기엔 넣지 않아야 오탐이 안 남
  * @param observer       rawPayload를 파싱한 최상위 {@link JSONArray}를 받아, 이 프로브가 보는
  *                       레벨에서 실제 관찰된 필드명 전체(여러 원소가 있으면 합집합)를 반환
+ * @param skipMissingWhenNoneObserved true면 관찰된 필드가 하나도 없을 때(이 레벨의 원소가 아예 없는 정상
+ *                       경우, 예: 전문 항목이 없는 법령) 누락 경고를 내지 않는다. 원소가 있는데 일부 필드만
+ *                       빠진 경우는 그대로 경고
  */
 public record StructureProbe(
     String label,
     Set<String> knownFields,
     Set<String> requiredFields,
-    Function<JSONArray, Set<String>> observer
+    Function<JSONArray, Set<String>> observer,
+    boolean skipMissingWhenNoneObserved
 ) {
+    public StructureProbe(String label, Set<String> knownFields, Set<String> requiredFields,
+                          Function<JSONArray, Set<String>> observer) {
+        this(label, knownFields, requiredFields, observer, false);
+    }
 }
