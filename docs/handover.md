@@ -43,7 +43,8 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 - 접속: `kubectl port-forward svc/admin-db-fy9tjq4tsk -n service-core 15432:5432` 후 psql. 사용 후 port-forward를 종료한다.
 
 ## 5. 확정된 결정 (2026-11-18 기준)
-- **교정시설 마스터는 `tb_dim_instt`**다. `tb_dim_instt_v2`는 폐기한다. 화면(admin-api) 전환은 admin-api 쪽에서 진행한다. 수집기에는 후속이 남아 있다(아래 6절).
+- **교정시설 마스터는 `tb_dim_instt`**다. `tb_dim_instt_v2`는 폐기한다. admin-api 전환은 2026-11-18 dev에 배포됐고, v2의 위경도, 지형, 상세주소를 마스터로 복사했다(백업 `tb_dim_instt_bak_20261118`, 스크립트는 admin-api 저장소 `scripts/restore-dim-instt-geo-from-v2-20261118.sql`). 마스터의 `terrain_info`는 시설 59곳에 채워져 있고 지방교정청 4곳과 상위 기관은 비어 있는 것이 정상이다. 수집기 후속은 아래 6절.
+- **주의**: 정형 "초기적재"(data-collector)가 다시 돌면 마스터의 위경도, 지형, `detail_addr`, `last_sync_addr`가 지워진다(11-08에 실제로 발생). 초기적재가 이 컬럼을 덮어쓰지 않도록 고치기 전에는 돌리지 않는다. 보라미 증분 동기화는 이 컬럼을 건드리지 않는다.
 - **신규 시설의 초기 위경도**는 사용자가 admin-fe에 Google Maps URL을 입력하면 admin-api가 좌표를 추출해 `tb_dim_instt`에 넣는다. 해발, 지형은 OpenTopoData(SRTM)로 계산한다. VWorld 자동 지오코딩은 성공률이 19%라 쓰지 않는다.
 - **안개, 박무, 연무 판정 기준**은 현재 코드(시정과 습도로 유도, `KmaAsosHourlyCleanser`)로 확정이다. 코드와 설정 파일에 남은 "기획 확정 대기" 문구는 낡았다.
 - **Genon 전송 형식은 변경하지 않는다**: manifest 필드, ZIP 폴더 구조, 파일 이름 규칙, 본문 JSON 원문 전송. 전송 관련 리팩터링은 출력이 바이트 단위로 같아야 한다. 구조를 바꿔야 할 것 같은 요구가 나오면 구현 전에 확인한다.
@@ -52,7 +53,7 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 
 ## 6. 남은 후속 작업
 1. ESB 전환([esb-migration.md](esb-migration.md)).
-2. admin-api의 `tb_dim_instt` 전환이 배포된 뒤:
+2. admin-api의 `tb_dim_instt` 전환은 배포 완료(2026-11-18). 수집기 쪽 남은 일:
    - 수집기가 취약도를 `facility-vulnerability.csv` 대신 `tb_dim_instt.terrain_info`에서 읽도록 바꾼다. 먼저 바꾸면 화면에서 고친 값이 수집기에 반영되지 않는다.
    - VWorld 호출(`VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로)과 `VWORLD_API_KEY`를 제거한다.
 3. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
