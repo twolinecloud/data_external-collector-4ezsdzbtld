@@ -55,7 +55,6 @@ springdoc:
     display-query-params-without-oauth2: true
     show-common-extensions: true
   show-actuator: true
-  show-login-endpoint: true
 
 logging:
   config: classpath:log4j2-spring.yml

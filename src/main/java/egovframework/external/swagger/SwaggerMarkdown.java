@@ -16,7 +16,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Getter
 public enum SwaggerMarkdown {
-    LOGIN("Login.md", "Login", SwaggerType.Tag),
     DESCRIPTION("Description.md", "Description", SwaggerType.Tag),
     ACTUATOR("Actuator.md", "Actuator", SwaggerType.Tag),
 
