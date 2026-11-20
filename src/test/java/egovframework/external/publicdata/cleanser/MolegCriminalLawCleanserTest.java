@@ -73,6 +73,57 @@ class MolegCriminalLawCleanserTest {
     }
 
     @Test
+    void 조문단위가_배열이_아닌_객체_하나여도_조문_프로브가_관찰한다() {
+        JSONObject unit = new JSONObject().put("조문여부", "조문").put("조문번호", "1").put("조문내용", "제1조(목적)");
+        JSONObject law = new JSONObject().put("조문", new JSONObject().put("조문단위", unit));
+        String raw = new JSONArray().put(new JSONObject().put("법령", law)).toString();
+
+        java.util.Set<String> observed = cleanser.structureProbes().get(1).observer().apply(new JSONArray(raw));
+
+        assertThat(observed).containsExactlyInAnyOrder("조문여부", "조문번호", "조문내용");
+    }
+
+    @Test
+    void 조문단위가_배열이면_모든_원소의_필드를_합쳐_관찰한다() {
+        JSONObject jomun = new JSONObject().put("조문여부", "조문").put("조문번호", "1").put("조문내용", "제1조(목적)");
+        JSONObject branch = new JSONObject().put("조문여부", "조문").put("조문번호", "2").put("조문가지번호", "2").put("항", "①");
+        JSONObject jeonmun = new JSONObject().put("조문여부", "전문").put("조문내용", "제1장 총칙");
+        JSONObject law = new JSONObject().put("조문",
+            new JSONObject().put("조문단위", new JSONArray().put(jomun).put(branch).put(jeonmun)));
+        String raw = new JSONArray().put(new JSONObject().put("법령", law)).toString();
+
+        assertThat(cleanser.structureProbes().get(1).observer().apply(new JSONArray(raw)))
+            .containsExactlyInAnyOrder("조문여부", "조문번호", "조문내용", "조문가지번호", "항");
+        assertThat(cleanser.structureProbes().get(2).observer().apply(new JSONArray(raw)))
+            .containsExactlyInAnyOrder("조문여부", "조문내용");
+    }
+
+    @Test
+    void 배열과_객체_형태_법령이_한_수집분에_섞여도_둘_다_관찰한다() {
+        JSONObject single = new JSONObject().put("조문여부", "조문").put("조문번호", "1");
+        JSONObject multiA = new JSONObject().put("조문여부", "조문").put("조문내용", "제1조");
+        JSONObject multiB = new JSONObject().put("조문여부", "조문").put("항", "①");
+        JSONObject objectLaw = new JSONObject().put("조문", new JSONObject().put("조문단위", single));
+        JSONObject arrayLaw = new JSONObject().put("조문",
+            new JSONObject().put("조문단위", new JSONArray().put(multiA).put(multiB)));
+        String raw = new JSONArray().put(new JSONObject().put("법령", objectLaw))
+            .put(new JSONObject().put("법령", arrayLaw)).toString();
+
+        assertThat(cleanser.structureProbes().get(1).observer().apply(new JSONArray(raw)))
+            .containsExactlyInAnyOrder("조문여부", "조문번호", "조문내용", "항");
+    }
+
+    @Test
+    void 조문단위가_없거나_다른_형태면_관찰없이_넘어간다() {
+        JSONObject noUnits = new JSONObject().put("조문", new JSONObject());
+        JSONObject oddUnits = new JSONObject().put("조문", new JSONObject().put("조문단위", "이상한 값"));
+        String raw = new JSONArray().put(new JSONObject().put("법령", noUnits)).put(new JSONObject().put("법령", oddUnits)).toString();
+
+        assertThat(cleanser.structureProbes().get(1).observer().apply(new JSONArray(raw))).isEmpty();
+        assertThat(cleanser.structureProbes().get(2).observer().apply(new JSONArray(raw))).isEmpty();
+    }
+
+    @Test
     void 새_필드가_섞이면_법령_프로브가_ADDED를_잡는다() {
         JSONObject law = new JSONObject()
             .put("개정문", new JSONObject())

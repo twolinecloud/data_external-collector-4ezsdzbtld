@@ -83,10 +83,28 @@ public class MolegCriminalLawCleanser implements PublicDataCleanser {
             if (!law.has("조문")) {
                 continue;
             }
-            JSONArray units = law.getJSONObject("조문").getJSONArray("조문단위");
+            JSONArray units = articleUnits(law.getJSONObject("조문"));
+            if (units == null) {
+                continue;
+            }
             keys.addAll(StructureProbeSupport.unionKeys(units, u -> articleTypeFilter.equals(u.optString("조문여부", ""))));
         }
         return keys;
+    }
+
+    /**
+     * {@code 조문단위}를 배열로 돌려준다. 조문이 하나뿐인 법령은 법제처가 배열이 아닌 객체 하나로 주므로
+     * (2026-11-19 법령 수집에서 16건 관찰) 객체면 원소 하나짜리 배열로 감싼다. 없거나 그 밖의 형태면 null.
+     */
+    private static JSONArray articleUnits(JSONObject jomun) {
+        Object units = jomun.opt("조문단위");
+        if (units instanceof JSONArray array) {
+            return array;
+        }
+        if (units instanceof JSONObject single) {
+            return new JSONArray().put(single);
+        }
+        return null;
     }
 
     private static Set<String> union(Set<String> a, Set<String> b) {
