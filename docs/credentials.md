@@ -2,6 +2,8 @@
 
 값은 이 문서에 적지 않는다. 모두 K8s Secret/ConfigMap으로 파드에 주입된다(`kubectl`로 직접 적용, ArgoCD 관리 밖). **현재 대부분이 개인 명의로 발급돼 있고, 법무부 명의로 옮기는 작업이 진행 중이다.**
 
+**키 관리 주체**: 이 문서의 키는 개발팀과 함께 **법무부 주무관도 관리**한다(발급, 갱신, 만료 확인). 담당자 이름과 연락처는 이 문서에 적지 않고 이관 때 별도로 전달한다. 키를 바꿀 때는 주무관에게도 알리고, 교체 이력은 아래 "키 교체 이력"에 남긴다.
+
 | 환경변수 | 대상 | 비고 |
 |---|---|---|
 | `KMA_VILLAGE_FORECAST_SERVICE_KEY` | 공공데이터포털 기상청 단기예보 | |
@@ -19,3 +21,20 @@
 - 기관 계정으로 옮길 때: 새 키를 발급받아 Secret/ConfigMap을 교체하고 파드를 재시작한다. **법제처는 OC(ID) 교체와 함께 클러스터 노드 IP를 새 계정에 다시 등록해야 한다.** 순서를 놓치면 법령 수집이 조용히 끊긴다([operations.md](operations.md)).
 - 호출량: 전체 하루 약 3,900건 수준이고 개발계정 한도는 일 10,000건으로 기록돼 있다. ESB 섀도 비교로 같은 호출을 한 번 더 보내면 서비스별 호출량이 두 배가 되니 그때 다시 계산한다.
 - 출처 표시: 데이터별 이용허락범위(공공누리 유형 등)는 각 API 상세 페이지에서 확인해야 한다. 표시는 화면을 만드는 쪽의 일이며 수집기는 `sourceName`을 로그와 이력에만 남긴다.
+
+## 키 교체 이력
+### 2026-11-19 신규 발급 키 반영
+`kubectl patch secret external-collector-secret-toqd7wzduo -n data-pipeline`으로 7개 키를 바꾸고 `kubectl rollout restart deploy/external-collector-4ezsdzbtld -n data-pipeline`로 재시작했다(16:12 KST). 값은 `.env`(로컬, git 제외)에서 가져왔다.
+
+| 키 | 교체 | 사전 확인 |
+|---|---|---|
+| `KMA_VILLAGE_FORECAST_SERVICE_KEY`, `KMA_WEATHER_WARNING_SERVICE_KEY`, `LIVING_WTHR_IDX_SERVICE_KEY`, `AIRKOREA_SERVICE_KEY` | 공공데이터포털 새 키 하나(64자)로 통일 | 서비스별로 `resultCode 00 / NORMAL_SERVICE` |
+| `KMA_APIHUB_AUTH_KEY` | 새 키 | ASOS 시간자료, 특보구역 관측소 데이터 수신 |
+| `SAFETYDATA_SERVICE_KEY` | 새 키 | `resultCode 00`, 틀린 키는 `30`으로 구분됨 |
+| `MOLEG_OC` | 새 OC | 클러스터 파드에서 호출 성공(노드 IP 등록 확인), 틀린 OC는 IP 검증 오류 |
+
+- 반영 뒤 첫 주기(재난문자 10건, 기상특보 26건 수집)에서 새 키 정상, ERROR 없음. API허브와 법제처 OC는 이후 스케줄(ASOS 매시, 법령 05:00 KST)에서 처음 쓰이니 그 로그에서 한 번 더 확인한다.
+- **공공데이터포털 키 형태가 바뀌었다.** 예전 키는 `%`, `+`, `/`가 든 URL 인코딩 형태(98자)였고 지금은 소문자 16진수(64자)다. 앱은 키를 인코딩하지 않고 그대로 붙이므로 영향이 없다. **HTTP 200만으로 성공을 판단하면 안 된다**(키가 틀려도 200이고 본문에 오류 코드가 담긴다). 본문의 `resultCode`/`NORMAL_SERVICE`로 판단한다.
+- 바꾸지 않은 것: `XENON_API_KEY`(값 변경 없음), `ADMIN_DB_*`. `GENON_API_KEY`와 `XENON_API_KEY`는 회사명 영문 표기를 잘못 알았던 흔적으로 호환용 두 이름이 공존하는 것이며 값은 같다.
+- Secret에 없는 키: `KMA_FORECAST_BULLETIN_SERVICE_KEY`(예보통보문, 운영 미사용), `VWORLD_API_KEY`(비어 있음). `.env`에는 값이 있다.
+- 롤백: 교체 전 Secret은 작업 PC에 임시 백업했다. 필요하면 이전 키로 같은 `patch`를 하고 파드를 재시작한다.

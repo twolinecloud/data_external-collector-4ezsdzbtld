@@ -53,13 +53,28 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 
 ## 6. 남은 후속 작업
 1. ESB 전환([esb-migration.md](esb-migration.md)).
-2. 시설 취약도 원천 전환은 **완료**(2026-11-18 커밋, push 시 배포): 룰 평가(`RuleEvaluationService`)가 `tb_dim_instt.terrain_info.vulnerability`를 읽는다(`DbFacilityVulnerabilitySource`). DB에 값이 없는 시설은 `facility-vulnerability.csv` 값으로 대체되고, 조회가 실패하면 CSV 전체를 쓴다. 롤백은 `PUBLIC_DATA_FACILITY_VULNERABILITY_SOURCE=csv`. 전환 전 DB와 CSV는 59곳 모두 같았고, 풍랑은 마스터에 없어 전 시설 MEDIUM(CSV 값)이다. 룰 평가는 현재 `RuleEvaluationController` API로만 호출된다(스케줄 없음).
+2. 시설 취약도 원천 전환은 **완료**(2026-11-18 `4c965c0` 배포·기동 확인: 이미지 태그 `...-4c965c0`, `Started Main`, ERROR 0, DB 조회 실패 경고 없음): 룰 평가(`RuleEvaluationService`)가 `tb_dim_instt.terrain_info.vulnerability`를 읽는다(`DbFacilityVulnerabilitySource`). DB에 값이 없는 시설은 `facility-vulnerability.csv` 값으로 대체되고, 조회가 실패하면 CSV 전체를 쓴다. 롤백은 `PUBLIC_DATA_FACILITY_VULNERABILITY_SOURCE=csv`. 전환 전 DB와 CSV는 59곳 모두 같았고, 풍랑은 마스터에 없어 전 시설 MEDIUM(CSV 값)이다. 룰 평가는 현재 `RuleEvaluationController` API로만 호출된다(스케줄 없음).
    - 전환 때 DB에서 시설을 더 이상 쓰지 않게 되면 CSV와 `FacilityVulnerabilityLoader`를 제거할 수 있다.
 3. **VWorld 제거(향후)**: 당분간 유지한다. 자동 지오코딩은 성공률 19%라 쓸모가 없고 신규 좌표는 Google Maps URL 입력(admin-api)으로 대체됐으므로 `VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로, `VWORLD_API_KEY`는 나중에 제거한다.
 4. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
 
+## 6-1. 2026-11-18 작업 이력(dev 배포 완료)
+| 커밋 | 내용 |
+|---|---|
+| `0fd6a48` | 법령 구조 드리프트 감지에서 정상 변이 필드(`별표`, `조문제개정유형`, `조문제목` 등)를 경고하지 않도록 정리. `StructureProbe`에 `skipMissingWhenNoneObserved` 추가. 이제 STRUCTURE-DRIFT 경고는 실제 구조 변화일 때만 나온다. |
+| `bae4a4a`, `12066e0` | 이관 문서(`docs/`) 추가, tb_dim_instt 전환 배포 상태 반영. |
+| `4c965c0` | 시설 취약도 원천을 `facility-vulnerability.csv`에서 `tb_dim_instt.terrain_info`로 전환(6장 2번 항목). |
+| (로컬 작업, push 전) | 스캐폴드 로그인 샘플 제거(`LoginController`, `LoginService`, `EmailAuth`), Swagger 소개문 교체. |
+| (로컬 작업, push 전) | 법령 구조 프로브가 조문이 1개뿐인 법령(`조문단위`가 배열이 아닌 객체)도 관찰하도록 수정(`MolegCriminalLawCleanser`), 배열·객체·혼합·없음 케이스 테스트 추가. 수정 전에는 객체를 만나면 같은 수집분의 나머지 법령 관찰이 중단되고 `프로브 관찰 실패` 경고가 나왔다(11-19 법령 수집에서 16건). 정제와 Genon 전송에는 영향이 없다. |
+| (이전 push) | ESB 선행 작업: `ExternalApiPort` 라우터, 응답 비교기([esb-migration.md](esb-migration.md)). |
+
+배포 후 확인: 파드 `Running 1/1`, 재시작 0회, 기동 4.9초, admin-db(Hikari) 연결 정상. 룰 평가가 DB 값으로 실제 호출되는 시점은 API 호출 때라 별도 관측하지 않았다.
+
+**2026-11-19 운영 키 교체**: 공공데이터포털, 기상청 API허브, 재난문자, 법제처 OC를 새 키로 바꿨다. Secret 반영, 파드 재시작, 사전 검증 결과는 [credentials.md](credentials.md#키-교체-이력)에 있다.
+
 ## 7. 알려진 한계
 - 재난문자 API는 "오늘" 날짜만 조회한다. 업스트림이 장애 후 소급 반영하면(11-14, 11-15 사례) 그 날짜분이 DB에 빠진다. 해당 두 날짜는 복구하지 않았다.
+- ASOS 시간자료는 매시 25분에 직전 정시 자료를 받는다. 그 실행이 API허브 타임아웃으로 3회 모두 실패하면 해당 시간분이 비고 다음 실행이 채워 주지 않는다(2026-11-20 04:00 KST분 지점 59곳 누락, 백필하지 않기로 함). 필요하면 `POST /public-data/collect/backfill/{operationKey}`로 채운다.
 - 같은 날짜 재난문자 호출이 일시적으로 HTML 에러 페이지(HTTP 200)를 주기도 한다. 다음 폴링에서 회복된다.
 - `tb_ext_disaster_msg`에는 시설과 매칭된 행만 저장된다(하루 4~7행 수준).
 - Genon `mst`는 11-16에 manifest에 추가했다. 이미 보낸 문서는 해시가 같아 소급 전송하지 않았고, 운영에서 mst가 실려 나간 전송은 아직 관측하지 못했다(법령이 실제로 바뀔 때 확인). 전체 재전송이 필요하면 `LAW_TRANSFER_SEND_ALL=true`로 한 번 보낸다(약 400MB).
