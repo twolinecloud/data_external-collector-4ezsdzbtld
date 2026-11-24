@@ -40,10 +40,12 @@
 - 롤백: 교체 전 Secret은 작업 PC에 임시 백업했다. 필요하면 이전 키로 같은 `patch`를 하고 파드를 재시작한다.
 
 ### 2026-11-19~24 Secret이 이전 키로 되돌려진 사건
-- 11-19 08:02Z, 11-20 08:43Z(17시대 KST)에 누군가 이 Secret만 `kubectl apply`로 다시 적용해 이전 키로 되돌렸다. 10-26 04:28Z에도 같은 방식의 적용이 있었다. **적용한 주체는 아직 모른다**(감사 로그로 확인 필요, 별도 조사 중).
-- 배포(Jenkins, ArgoCD)가 원인이 아니다. 배포 때 Secret은 바뀌지 않았고, Jenkins Deploy가 쓰는 HelmChart `master`의 이 Secret 템플릿은 `data:`가 비어 있다. ConfigMap도 같은 시각에 건드려지지 않았다.
-- 이전 키의 출처는 HelmChart 저장소 `feature/external-collector` 브랜치의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`이었다. 이 파일을 2026-11-24에 새 키로 고쳐 push했다(`817e106`). **이 파일이 Secret 값의 원본이다.** 키를 바꿀 때는 클러스터 Secret과 이 파일을 함께 바꾼다.
-- 11-24 10:23 KST에 Secret을 다시 반영하고 파드를 재시작했다. 되돌려짐이 또 일어나는지 보려면 아래 명령으로 `kubectl-client-side-apply` 시각이 바뀌는지 확인한다.
+- **원인**: Jenkins Deploy 단계(`Jenkinsfile` 86~90줄)가 배포 때마다 HelmChart **`master`**의 `pipeline/Common`을 통째로 `helm template | kubectl apply` 한다. 이 `Common`에 이 Secret(`external-collector-secret-toqd7wzduo`)과 `regsecret` 등이 함께 들어 있어서, **`Common`을 쓰는 어느 서비스든 배포하면** 이 Secret이 `master`의 값으로 덮인다. 새 키를 `kubectl patch`로만 넣고 `master`를 고치지 않아서 되돌려졌다.
+- 확인된 시각(UTC): 11-19 08:02:08, 11-20 08:43:17, 11-24 01:32:07. 11-24 건은 우리 `dev` push에 이어 Jenkins가 `master`에 `Pushed Helm Chart: ...-d187f2b`를 push한 시각과 같고, 같은 초에 `regsecret`도 적용됐다. 앞의 두 건은 다른 서비스 배포였을 가능성이 크고 빌드 이력으로 확정할 수 있다(미확인). 10-26 04:28:27에도 같은 적용이 있었다.
+- 값이 같으면 적용해도 `managedFields`가 갱신되지 않는다. 그래서 클러스터 값과 `master` 값이 같을 때는 아무 흔적이 없다.
+- **값의 원본은 HelmChart `master`의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`이다.** 11-24에 새 키로 고쳤다(`e01264e`, `feature/external-collector`의 `817e106`과 같은 내용). 키를 바꿀 때는 클러스터 Secret과 이 파일을 함께 바꾼다. `kubectl patch`만 하면 다음 배포 때 되돌려진다.
+- 11-24 10:40 KST에 Secret을 다시 반영하고 파드를 재시작했다. 이후 배포가 새 키를 유지하는지는 아래 명령으로 `kubectl-client-side-apply` 시각이 바뀌는지, 키 해시가 새 값인지 확인한다.
   `kubectl get secret external-collector-secret-toqd7wzduo -n data-pipeline --show-managed-fields -o json | python3 -c "import sys,json;[print(m['manager'],m['time']) for m in json.load(sys.stdin)['metadata']['managedFields']]"`
-- 이 저장소의 Secret 템플릿에는 운영 키가 base64로 들어 있다. 기관 이관 전에 저장소 접근 범위를 확인한다.
-
+- Turaco가 `master`를 재생성하면(09-23, 09-29 이력) 이 파일이 초기화되어 되돌려질 수 있다. 재생성 뒤에는 이 파일을 다시 확인한다.
+- 우리 배포도 같은 `Common`의 다른 서비스 Secret과 ConfigMap을 `master` 값으로 다시 적용한다. 다른 팀이 직접 바꾼 값이 있다면 우리 배포 때 되돌려질 수 있다.
+- 이 저장소의 Secret 템플릿에는 운영 키가 base64로 들어 있다(암호화 아님). 이전 키도 git 이력에 남아 있으니 법무부 명의 이관 때 이전 키를 폐기하는지 정한다. 기관 이관 전에 저장소 접근 범위도 확인한다.

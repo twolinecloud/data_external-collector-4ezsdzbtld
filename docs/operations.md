@@ -59,7 +59,7 @@
 - 경계 근처 시설은 `[WARN-ZONE]` 로그가 매일 난다(부산구치소, 인천구치소, 소망교도소 등). 오류가 아니라 확인 권장 안내다.
 
 ## 키가 이전 값으로 되돌아갔을 때
-- 증상: 파드와 Secret의 키가 교체 전 값이다. 이전 키가 아직 유효하면 수집은 계속되어 눈에 띄지 않는다. `kubectl get secret ... --show-managed-fields`에서 `kubectl-client-side-apply` 시각이 최근이면 누군가 다시 적용한 것이다.
-- 조치: HelmChart `feature/external-collector`의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`(값의 원본)이 최신 키인지 확인하고, Secret을 `kubectl patch`로 반영한 뒤 `kubectl rollout restart deploy/external-collector-4ezsdzbtld -n data-pipeline`로 재시작한다. 반영 값은 해시로만 비교하고 화면에 찍지 않는다.
+- 증상: 파드와 Secret의 키가 교체 전 값이다. 이전 키가 아직 유효하면 수집은 계속되어 눈에 띄지 않는다. `kubectl get secret ... --show-managed-fields`에서 `kubectl-client-side-apply` 시각이 최근이면 배포(또는 누군가의 apply)가 다시 적용한 것이다.
+- 원인: Jenkins Deploy가 배포마다 HelmChart `master`의 `pipeline/Common`(이 Secret 포함)을 적용한다. `Common`을 쓰는 어느 서비스의 배포든 해당된다.
+- 조치: HelmChart `master`의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`(값의 원본)이 최신 키인지 먼저 확인하고 고친다. 그다음 Secret을 `kubectl patch`로 반영하고 `kubectl rollout restart deploy/external-collector-4ezsdzbtld -n data-pipeline`로 재시작한다. 반영 값은 해시로만 비교하고 화면에 찍지 않는다. **`master`를 고치지 않고 `patch`만 하면 다음 배포 때 또 되돌려진다.**
 - ASOS는 API허브 읽기 타임아웃으로 정시 자료가 비는 일이 반복된다(11-21, 11-23 등). 다음 실행이 채워 주지 않는다.
-

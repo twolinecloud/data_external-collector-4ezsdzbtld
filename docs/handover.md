@@ -73,7 +73,7 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 
 **2026-11-19 운영 키 교체**: 공공데이터포털, 기상청 API허브, 재난문자, 법제처 OC를 새 키로 바꿨다. Secret 반영, 파드 재시작, 사전 검증 결과는 [credentials.md](credentials.md#키-교체-이력)에 있다.
 
-**2026-11-24 Secret 되돌려짐**: 새 키를 반영한 뒤 누군가 이전 키가 든 Secret 파일을 `kubectl apply`로 두 번 다시 적용했다(적용 주체 미확인). 원본 파일(HelmChart `feature/external-collector`)을 새 키로 고치고 Secret을 다시 반영했다. 자세한 내용은 [credentials.md](credentials.md#2026-11-1924-secret이-이전-키로-되돌려진-사건)에 있다.
+**2026-11-24 Secret 되돌려짐**: 새 키를 `kubectl patch`로 반영했더니 배포 때마다 이전 키로 되돌아갔다. Jenkins Deploy가 HelmChart `master`의 `Common` 차트(이전 키 포함)를 통째로 적용하기 때문이며, `Common`을 쓰는 어느 서비스의 배포든 해당된다. `master`의 Secret 템플릿을 새 키로 고쳐(`e01264e`) 해결했다. 키를 바꿀 때는 클러스터와 `master` 파일을 함께 바꾼다. 자세한 내용은 [credentials.md](credentials.md#2026-11-1924-secret이-이전-키로-되돌려진-사건)에 있다.
 
 ## 7. 알려진 한계
 - 재난문자 API는 "오늘" 날짜만 조회한다. 업스트림이 장애 후 소급 반영하면(11-14, 11-15 사례) 그 날짜분이 DB에 빠진다. 해당 두 날짜는 복구하지 않았다.
