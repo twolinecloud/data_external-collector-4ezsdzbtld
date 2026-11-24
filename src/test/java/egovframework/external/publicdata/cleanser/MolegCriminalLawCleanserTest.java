@@ -56,9 +56,9 @@ class MolegCriminalLawCleanserTest {
 
         java.util.Set<String> observed = probe.observer().apply(new JSONArray(raw));
         assertThat(observed).containsExactlyInAnyOrder("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙");
-        // 알려진 필드 = 항상 있는 6개 + 법령에 따라 있는 선택 필드(별표)
+        // 알려진 필드 = 항상 있는 5개 + 법령에 따라 있는 선택 필드(별표, 부칙)
         assertThat(probe.knownFields()).containsExactlyInAnyOrder("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙", "별표");
-        assertThat(probe.requiredFields()).containsExactlyInAnyOrderElementsOf(observed);
+        assertThat(probe.requiredFields()).containsExactlyInAnyOrder("개정문", "조문", "제개정이유", "법령키", "기본정보");
     }
 
     @Test
@@ -111,6 +111,30 @@ class MolegCriminalLawCleanserTest {
 
         assertThat(cleanser.structureProbes().get(1).observer().apply(new JSONArray(raw)))
             .containsExactlyInAnyOrder("조문여부", "조문번호", "조문내용", "항");
+    }
+
+    @Test
+    void 부칙이_없는_법령도_누락_경고가_나지_않는다() {
+        JSONObject law = new JSONObject().put("개정문", "x").put("조문", new JSONObject()).put("제개정이유", "x")
+            .put("법령키", "k").put("기본정보", new JSONObject());
+        String raw = new JSONArray().put(new JSONObject().put("법령", law)).toString();
+        StructureProbe probe = cleanser.structureProbes().get(0);
+
+        java.util.Set<String> missing = new java.util.HashSet<>(probe.requiredFields());
+        missing.removeAll(probe.observer().apply(new JSONArray(raw)));
+
+        assertThat(missing).isEmpty();
+    }
+
+    @Test
+    void 조문단위가_전문_원소_하나뿐인_법령은_조문_프로브가_관찰없이_누락_경고도_없다() {
+        JSONObject jeonmun = new JSONObject().put("조문여부", "전문").put("조문내용", "제목").put("조문번호", "0");
+        JSONObject law = new JSONObject().put("조문", new JSONObject().put("조문단위", jeonmun));
+        String raw = new JSONArray().put(new JSONObject().put("법령", law)).toString();
+        StructureProbe jomunProbe = cleanser.structureProbes().get(1);
+
+        assertThat(jomunProbe.observer().apply(new JSONArray(raw))).isEmpty();
+        assertThat(jomunProbe.skipMissingWhenNoneObserved()).isTrue();
     }
 
     @Test

@@ -28,15 +28,16 @@ import java.util.Set;
 @Component
 public class MolegCriminalLawCleanser implements PublicDataCleanser {
 
-    /** {@code 법령} 직속 키 전체 (2026-08-14 형법/형사소송법 실측, 6개 - 선택 필드 없음). */
+    /** {@code 법령} 직속 키 중 항상 있는 것 (2026-08-14 형법/형사소송법 실측, 5개). */
     private static final Set<String> LAW_FIELDS =
-        Set.of("개정문", "조문", "제개정이유", "법령키", "기본정보", "부칙");
+        Set.of("개정문", "조문", "제개정이유", "법령키", "기본정보");
 
     /**
      * {@code 법령} 직속 키 중 법령에 따라 있을 수도 없을 수도 있는 선택 필드. 2026-11-18 운영 로그에서 495건 중
-     * 일부에만 {@code 별표}가 붙는 것을 확인(전부 정상 응답이라 경고 대상이 아님).
+     * 일부에만 {@code 별표}가 붙는 것을 확인했고, 2026-11-23에는 "마약류 관리에 관한 법률 시행규칙"에 {@code 부칙}이
+     * 없는 것을 확인했다(전부 정상 응답이라 경고 대상이 아님).
      */
-    private static final Set<String> LAW_OPTIONAL_FIELDS = Set.of("별표");
+    private static final Set<String> LAW_OPTIONAL_FIELDS = Set.of("별표", "부칙");
 
     /** {@code 조문단위} 원소가 조문/전문 어느 쪽이든 항상 갖는 필드 (2026-08-14 전수확인, 100%). */
     private static final Set<String> ARTICLE_UNIT_COMMON_FIELDS = Set.of(
@@ -60,8 +61,10 @@ public class MolegCriminalLawCleanser implements PublicDataCleanser {
         return List.of(
             new StructureProbe("법령", union(LAW_FIELDS, LAW_OPTIONAL_FIELDS), LAW_FIELDS,
                 MolegCriminalLawCleanser::observeLawFields),
+            // 조문단위가 전문 원소 하나뿐인 규칙(예: 국가보안유공자상금지급등에관한규정제8조단서의규정에의한무기지정규칙)이
+            // 정상으로 있다 - 조문 원소가 아예 없으면 누락 경고를 내지 않는다.
             new StructureProbe("조문단위:조문", JOMUN_KNOWN_FIELDS, ARTICLE_UNIT_COMMON_FIELDS,
-                items -> observeArticleUnitFields(items, "조문")),
+                items -> observeArticleUnitFields(items, "조문"), true),
             // 전문 항목(편·장 제목 등)이 아예 없는 법령이 정상으로 많다 - 원소가 없으면 누락 경고를 내지 않는다.
             new StructureProbe("조문단위:전문", JEONMUN_KNOWN_FIELDS, ARTICLE_UNIT_COMMON_FIELDS,
                 items -> observeArticleUnitFields(items, "전문"), true)
