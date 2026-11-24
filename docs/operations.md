@@ -57,3 +57,9 @@
 ## 기상특보 정제 주의
 - `collect_dtm`은 마지막 수집 시각(예 23:50)이고, `tm_seq` 재사용으로 과거 행이 덮일 수 있다. 특보 세분 구역은 시설 위경도, 가장 가까운 AWS 관측소, 3km 경계, 해발(OpenTopoData)로 자동 계산한다.
 - 경계 근처 시설은 `[WARN-ZONE]` 로그가 매일 난다(부산구치소, 인천구치소, 소망교도소 등). 오류가 아니라 확인 권장 안내다.
+
+## 키가 이전 값으로 되돌아갔을 때
+- 증상: 파드와 Secret의 키가 교체 전 값이다. 이전 키가 아직 유효하면 수집은 계속되어 눈에 띄지 않는다. `kubectl get secret ... --show-managed-fields`에서 `kubectl-client-side-apply` 시각이 최근이면 누군가 다시 적용한 것이다.
+- 조치: HelmChart `feature/external-collector`의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`(값의 원본)이 최신 키인지 확인하고, Secret을 `kubectl patch`로 반영한 뒤 `kubectl rollout restart deploy/external-collector-4ezsdzbtld -n data-pipeline`로 재시작한다. 반영 값은 해시로만 비교하고 화면에 찍지 않는다.
+- ASOS는 API허브 읽기 타임아웃으로 정시 자료가 비는 일이 반복된다(11-21, 11-23 등). 다음 실행이 채워 주지 않는다.
+

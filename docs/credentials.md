@@ -38,3 +38,12 @@
 - 바꾸지 않은 것: `XENON_API_KEY`(값 변경 없음), `ADMIN_DB_*`. `GENON_API_KEY`와 `XENON_API_KEY`는 회사명 영문 표기를 잘못 알았던 흔적으로 호환용 두 이름이 공존하는 것이며 값은 같다.
 - Secret에 없는 키: `KMA_FORECAST_BULLETIN_SERVICE_KEY`(예보통보문, 운영 미사용), `VWORLD_API_KEY`(비어 있음). `.env`에는 값이 있다.
 - 롤백: 교체 전 Secret은 작업 PC에 임시 백업했다. 필요하면 이전 키로 같은 `patch`를 하고 파드를 재시작한다.
+
+### 2026-11-19~24 Secret이 이전 키로 되돌려진 사건
+- 11-19 08:02Z, 11-20 08:43Z(17시대 KST)에 누군가 이 Secret만 `kubectl apply`로 다시 적용해 이전 키로 되돌렸다. 10-26 04:28Z에도 같은 방식의 적용이 있었다. **적용한 주체는 아직 모른다**(감사 로그로 확인 필요, 별도 조사 중).
+- 배포(Jenkins, ArgoCD)가 원인이 아니다. 배포 때 Secret은 바뀌지 않았고, Jenkins Deploy가 쓰는 HelmChart `master`의 이 Secret 템플릿은 `data:`가 비어 있다. ConfigMap도 같은 시각에 건드려지지 않았다.
+- 이전 키의 출처는 HelmChart 저장소 `feature/external-collector` 브랜치의 `pipeline/Common/templates/external-collector-secret-toqd7wzduo.yaml`이었다. 이 파일을 2026-11-24에 새 키로 고쳐 push했다(`817e106`). **이 파일이 Secret 값의 원본이다.** 키를 바꿀 때는 클러스터 Secret과 이 파일을 함께 바꾼다.
+- 11-24 10:23 KST에 Secret을 다시 반영하고 파드를 재시작했다. 되돌려짐이 또 일어나는지 보려면 아래 명령으로 `kubectl-client-side-apply` 시각이 바뀌는지 확인한다.
+  `kubectl get secret external-collector-secret-toqd7wzduo -n data-pipeline --show-managed-fields -o json | python3 -c "import sys,json;[print(m['manager'],m['time']) for m in json.load(sys.stdin)['metadata']['managedFields']]"`
+- 이 저장소의 Secret 템플릿에는 운영 키가 base64로 들어 있다. 기관 이관 전에 저장소 접근 범위를 확인한다.
+

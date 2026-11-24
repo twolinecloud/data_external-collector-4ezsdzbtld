@@ -58,19 +58,22 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 3. **VWorld 제거(향후)**: 당분간 유지한다. 자동 지오코딩은 성공률 19%라 쓸모가 없고 신규 좌표는 Google Maps URL 입력(admin-api)으로 대체됐으므로 `VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로, `VWORLD_API_KEY`는 나중에 제거한다.
 4. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
 
-## 6-1. 2026-11-18 작업 이력(dev 배포 완료)
+## 6-1. 2026-11-18~20 작업 이력(dev 반영 완료)
 | 커밋 | 내용 |
 |---|---|
 | `0fd6a48` | 법령 구조 드리프트 감지에서 정상 변이 필드(`별표`, `조문제개정유형`, `조문제목` 등)를 경고하지 않도록 정리. `StructureProbe`에 `skipMissingWhenNoneObserved` 추가. 이제 STRUCTURE-DRIFT 경고는 실제 구조 변화일 때만 나온다. |
 | `bae4a4a`, `12066e0` | 이관 문서(`docs/`) 추가, tb_dim_instt 전환 배포 상태 반영. |
 | `4c965c0` | 시설 취약도 원천을 `facility-vulnerability.csv`에서 `tb_dim_instt.terrain_info`로 전환(6장 2번 항목). |
-| (로컬 작업, push 전) | 스캐폴드 로그인 샘플 제거(`LoginController`, `LoginService`, `EmailAuth`), Swagger 소개문 교체. |
-| (로컬 작업, push 전) | 법령 구조 프로브가 조문이 1개뿐인 법령(`조문단위`가 배열이 아닌 객체)도 관찰하도록 수정(`MolegCriminalLawCleanser`), 배열·객체·혼합·없음 케이스 테스트 추가. 수정 전에는 객체를 만나면 같은 수집분의 나머지 법령 관찰이 중단되고 `프로브 관찰 실패` 경고가 나왔다(11-19 법령 수집에서 16건). 정제와 Genon 전송에는 영향이 없다. |
+| `6db7702` | 스캐폴드 로그인 샘플 제거(`LoginController`, `LoginService`, `EmailAuth`), Swagger 소개문 교체. |
+| `2318b7d` | 법령 구조 프로브가 조문이 1개뿐인 법령(`조문단위`가 배열이 아닌 객체)도 관찰하도록 수정(`MolegCriminalLawCleanser`), 배열·객체·혼합·없음 케이스 테스트 추가. 수정 전에는 객체를 만나면 같은 수집분의 나머지 법령 관찰이 중단되고 `프로브 관찰 실패` 경고가 나왔다(11-19 법령 수집에서 16건). 정제와 Genon 전송에는 영향이 없다. |
+| `cb8161f` | 프로브 오탐 제거: 조문단위가 전문 원소 하나뿐인 규칙은 조문 프로브가 누락 경고를 내지 않고, `부칙`을 선택 필드로 옮겼다(마약류 관리에 관한 법률 시행규칙에 부칙이 없음). |
 | (이전 push) | ESB 선행 작업: `ExternalApiPort` 라우터, 응답 비교기([esb-migration.md](esb-migration.md)). |
 
 배포 후 확인: 파드 `Running 1/1`, 재시작 0회, 기동 4.9초, admin-db(Hikari) 연결 정상. 룰 평가가 DB 값으로 실제 호출되는 시점은 API 호출 때라 별도 관측하지 않았다.
 
 **2026-11-19 운영 키 교체**: 공공데이터포털, 기상청 API허브, 재난문자, 법제처 OC를 새 키로 바꿨다. Secret 반영, 파드 재시작, 사전 검증 결과는 [credentials.md](credentials.md#키-교체-이력)에 있다.
+
+**2026-11-24 Secret 되돌려짐**: 새 키를 반영한 뒤 누군가 이전 키가 든 Secret 파일을 `kubectl apply`로 두 번 다시 적용했다(적용 주체 미확인). 원본 파일(HelmChart `feature/external-collector`)을 새 키로 고치고 Secret을 다시 반영했다. 자세한 내용은 [credentials.md](credentials.md#2026-11-1924-secret이-이전-키로-되돌려진-사건)에 있다.
 
 ## 7. 알려진 한계
 - 재난문자 API는 "오늘" 날짜만 조회한다. 업스트림이 장애 후 소급 반영하면(11-14, 11-15 사례) 그 날짜분이 DB에 빠진다. 해당 두 날짜는 복구하지 않았다.
