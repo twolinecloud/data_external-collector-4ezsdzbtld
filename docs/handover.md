@@ -56,7 +56,7 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 2. 시설 취약도 원천 전환은 **완료**(2026-11-18 `4c965c0` 배포·기동 확인: 이미지 태그 `...-4c965c0`, `Started Main`, ERROR 0, DB 조회 실패 경고 없음): 룰 평가(`RuleEvaluationService`)가 `tb_dim_instt.terrain_info.vulnerability`를 읽는다(`DbFacilityVulnerabilitySource`). DB에 값이 없는 시설은 `facility-vulnerability.csv` 값으로 대체되고, 조회가 실패하면 CSV 전체를 쓴다. 롤백은 `PUBLIC_DATA_FACILITY_VULNERABILITY_SOURCE=csv`. 전환 전 DB와 CSV는 59곳 모두 같았고, 풍랑은 마스터에 없어 전 시설 MEDIUM(CSV 값)이다. 룰 평가는 현재 `RuleEvaluationController` API로만 호출된다(스케줄 없음).
    - 전환 때 DB에서 시설을 더 이상 쓰지 않게 되면 CSV와 `FacilityVulnerabilityLoader`를 제거할 수 있다.
 3. **VWorld 제거(향후)**: 당분간 유지한다. 자동 지오코딩은 성공률 19%라 쓸모가 없고 신규 좌표는 Google Maps URL 입력(admin-api)으로 대체됐으므로 `VWorldGeocoder`, `FacilitySyncService`의 자동 지오코딩 경로, `VWORLD_API_KEY`는 나중에 제거한다.
-4. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기).
+4. 코드, 설정 주석의 낡은 문구 정리(안개 기준 "확정 대기", 루트 README의 환경 표기)는 **완료**(`a088dbc`).
 
 ## 6-1. 2026-11-18~20 작업 이력(dev 반영 완료)
 | 커밋 | 내용 |
