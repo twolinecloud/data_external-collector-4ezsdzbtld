@@ -28,7 +28,7 @@ cron은 `application.yml`의 `public-data.collector.*`에 있고 **KST 기준**�
 - 관리자 화면의 "바로 실행"과 스케줄 즉시 반영 API는 루트 `README.md`에 있다. 주기 실행 시각은 화면에서 못 바꾸고 cron 수정과 배포로만 바뀐다.
 
 ## 3. 빌드와 배포
-- Java 17, Spring Boot 3, Maven. `mvn test`로 전체 테스트(현재 744건)를 돌린다.
+- Java 17, Spring Boot 3, Maven. `mvn test`로 전체 테스트(현재 738건)를 돌린다.
 - **`dev` 브랜치에 push하면 Jenkins 파이프라인이 빌드, 이미지 푸시, 배포까지 한다.** `master`는 쓰지 않는다(08-05 이후 갱신 안 됨).
 - ArgoCD는 자동 sync가 꺼져 있다. 배포는 Jenkinsfile 마지막 `Deploy` 단계가 `argocd app sync`를 직접 호출해서 일어난다. 이 단계가 실패하면 HelmChart만 갱신되고 OutOfSync로 멈춘다 → [operations.md](operations.md).
 - 배포 확인: 파드 이미지 태그 끝이 커밋 해시와 같은지, `Started Main`과 ERROR 0건을 본다.
