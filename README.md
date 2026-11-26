@@ -3,7 +3,7 @@
 ##1. Environment
 - Maven 3.0 이상
 - JAVA 17
-- SpringBoot 3.2 (자세한 인수인계 자료는 `docs/README.md`)
+- SpringBoot 3.5 (자세한 인수인계 자료는 `docs/README.md`)
 
 ##2. Project Run
 - Run Server
@@ -18,8 +18,6 @@
 - Build Package
 
     `{SRC_ROOT}$ mvn package`
-    
-    `{SRC_ROOT}$ mvn package -Prelease`
     
 
 ## 관리자 서비스(admin-api) 연동 - 바로 실행 / 스케줄 즉시 반영

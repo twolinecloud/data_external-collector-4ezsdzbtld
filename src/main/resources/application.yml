@@ -227,8 +227,8 @@ public-data:
       # 주의 - 안개/박무/연무를 "관측된 현상코드"로 읽을 수 없다. 일기 항목(WW/WC/WP)은 일기
       # 포함여부(IX)가 1인 지점만 채워지는데, 실측 결과 전국 97개 지점 중 9개뿐이었다
       # (9/1 06시·07시 동일). 교정기관 59개소를 그걸로 덮을 수 없어서, 거의 전 지점에 들어오는
-      # 시정(VS, 96/97)과 습도(HM, 97/97)로 유도한다. 판정 기준값은 기획 확정 대기 중 -
-      # 통상 안개<1km, 박무 1~10km+고습도, 연무 1~10km+저습도.
+      # 시정(VS, 96/97)과 습도(HM, 97/97)로 유도한다. 판정 기준 확정(2026-11-18) -
+      # 안개<1km, 박무 1~10km+고습도, 연무 1~10km+저습도.
       endpoint: ${KMA_ASOS_HOURLY_ENDPOINT:https://apihub.kma.go.kr/api/typ01/url/kma_sfctm2.php}
       auth-key: ${KMA_APIHUB_AUTH_KEY:}
     forecast-bulletin:
